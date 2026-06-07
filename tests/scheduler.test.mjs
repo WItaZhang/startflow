@@ -269,6 +269,42 @@ test("scheduler does not create sub-minimum trailing blocks", () => {
   assert.equal(taskBlocks.reduce((sum, block) => sum + block.minutes, 0), 175);
 });
 
+test("scheduler allows one short trailing block to finish an indivisible remainder", () => {
+  const state = {
+    settings: {
+      wake: "08:00",
+      sleep: "22:00",
+      minBlock: 60,
+      maxBlock: 90,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
+    },
+    tasks: [
+      {
+        id: "task-a",
+        title: "短尾巴任务",
+        duration: 95,
+        doneMinutes: 0,
+        deadline: "2026-06-06T12:00:00",
+        mode: "auto",
+        dependsOn: "",
+        history: []
+      }
+    ],
+    events: []
+  };
+
+  const plan = buildPlan(state, { now: "2026-06-06T08:00:00", horizonDays: 1 });
+  const taskBlocks = plan.blocks.filter((block) => block.type === "task");
+  const shortBlocks = taskBlocks.filter((block) => block.minutes < 60);
+
+  assert.equal(plan.risks.length, 0);
+  assert.deepEqual(taskBlocks.map((block) => block.minutes), [60, 35]);
+  assert.equal(shortBlocks.length, 1);
+  assert.ok(taskBlocks.every((block) => block.minutes <= 90));
+  assert.equal(taskBlocks.reduce((sum, block) => sum + block.minutes, 0), 95);
+});
+
 test("scheduler supports sleep times after midnight", () => {
   const state = {
     settings: {

@@ -124,25 +124,25 @@ function scheduleTask(task, { busy, settings, startAfter, latestEnd }) {
   }
 
   while (remaining > 0) {
-    if (remaining < minBlock && blocks.length > 0) {
-      break;
-    }
+    const isShortTail = remaining < minBlock && blocks.length > 0;
 
     const slot = findNextFreeSlot({
       busy,
       startAfter: blocks.at(-1)?.end ?? startAfter,
       latestEnd,
-      minMinutes: Math.min(minBlock, remaining),
+      minMinutes: isShortTail ? remaining : Math.min(minBlock, remaining),
       settings
     });
 
     if (!slot) break;
 
     let minutes = Math.min(remaining, targetBlock, minutesBetween(slot.start, slot.end));
-    if (task.mode === "single" && remaining <= minutesBetween(slot.start, slot.end)) {
+    if (isShortTail) {
+      minutes = remaining;
+    } else if (task.mode === "single" && remaining <= minutesBetween(slot.start, slot.end)) {
       minutes = remaining;
     }
-    if (minutes < minBlock && remaining > minBlock) {
+    if (!isShortTail && minutes < minBlock && remaining > minBlock) {
       break;
     }
 
