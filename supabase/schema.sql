@@ -181,3 +181,149 @@ drop trigger if exists events_set_updated_at on public.events;
 create trigger events_set_updated_at
   before update on public.events
   for each row execute function public.set_updated_at();
+
+create or replace function public.save_startflow_state(input_state jsonb)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  current_user_id uuid := auth.uid();
+begin
+  if current_user_id is null then
+    raise exception 'StartFlow save requires an authenticated user.';
+  end if;
+
+  insert into public.user_settings (
+    user_id,
+    wake,
+    sleep,
+    min_block,
+    max_block,
+    daily_buffer,
+    deadline_buffer_hours
+  )
+  values (
+    current_user_id,
+    coalesce(input_state #>> '{settings,wake}', '07:30'),
+    coalesce(input_state #>> '{settings,sleep}', '23:30'),
+    coalesce((input_state #>> '{settings,minBlock}')::integer, 25),
+    coalesce((input_state #>> '{settings,maxBlock}')::integer, 90),
+    coalesce((input_state #>> '{settings,dailyBuffer}')::integer, 30),
+    coalesce((input_state #>> '{settings,deadlineBufferHours}')::integer, 2)
+  )
+  on conflict (user_id) do update set
+    wake = excluded.wake,
+    sleep = excluded.sleep,
+    min_block = excluded.min_block,
+    max_block = excluded.max_block,
+    daily_buffer = excluded.daily_buffer,
+    deadline_buffer_hours = excluded.deadline_buffer_hours;
+
+  insert into public.tasks (
+    user_id,
+    id,
+    title,
+    duration,
+    done_minutes,
+    deadline,
+    mode,
+    depends_on,
+    min_block,
+    max_block,
+    start_hint,
+    missed_count
+  )
+  select
+    current_user_id,
+    task_item->>'id',
+    coalesce(task_item->>'title', '未命名任务'),
+    coalesce((task_item->>'duration')::integer, 0),
+    least(coalesce((task_item->>'doneMinutes')::integer, 0), coalesce((task_item->>'duration')::integer, 0)),
+    (task_item->>'deadline')::timestamptz,
+    coalesce(task_item->>'mode', 'auto'),
+    nullif(task_item->>'dependsOn', ''),
+    nullif(task_item->>'minBlock', '')::integer,
+    nullif(task_item->>'maxBlock', '')::integer,
+    coalesce(task_item->>'startHint', ''),
+    coalesce((task_item->>'missedCount')::integer, 0)
+  from jsonb_array_elements(coalesce(input_state->'tasks', '[]'::jsonb)) as task_item
+  where task_item ? 'id'
+  on conflict (user_id, id) do update set
+    title = excluded.title,
+    duration = excluded.duration,
+    done_minutes = excluded.done_minutes,
+    deadline = excluded.deadline,
+    mode = excluded.mode,
+    depends_on = excluded.depends_on,
+    min_block = excluded.min_block,
+    max_block = excluded.max_block,
+    start_hint = excluded.start_hint,
+    missed_count = excluded.missed_count;
+
+  delete from public.task_history
+  where user_id = current_user_id;
+
+  insert into public.task_history (
+    user_id,
+    task_id,
+    id,
+    label,
+    minutes,
+    happened_at
+  )
+  select
+    current_user_id,
+    task_item->>'id',
+    history_item->>'id',
+    coalesce(history_item->>'label', ''),
+    coalesce((history_item->>'minutes')::integer, 0),
+    coalesce((history_item->>'at')::timestamptz, now())
+  from jsonb_array_elements(coalesce(input_state->'tasks', '[]'::jsonb)) as task_item
+  cross join jsonb_array_elements(coalesce(task_item->'history', '[]'::jsonb)) as history_item
+  where task_item ? 'id'
+    and history_item ? 'id';
+
+  insert into public.events (
+    user_id,
+    id,
+    title,
+    start_at,
+    end_at,
+    repeating
+  )
+  select
+    current_user_id,
+    event_item->>'id',
+    coalesce(event_item->>'title', '未命名日程'),
+    (event_item->>'start')::timestamptz,
+    (event_item->>'end')::timestamptz,
+    coalesce((event_item->>'repeating')::boolean, false)
+  from jsonb_array_elements(coalesce(input_state->'events', '[]'::jsonb)) as event_item
+  where event_item ? 'id'
+  on conflict (user_id, id) do update set
+    title = excluded.title,
+    start_at = excluded.start_at,
+    end_at = excluded.end_at,
+    repeating = excluded.repeating;
+
+  delete from public.events existing
+  where existing.user_id = current_user_id
+    and not exists (
+      select 1
+      from jsonb_array_elements(coalesce(input_state->'events', '[]'::jsonb)) as event_item
+      where event_item->>'id' = existing.id
+    );
+
+  delete from public.tasks existing
+  where existing.user_id = current_user_id
+    and not exists (
+      select 1
+      from jsonb_array_elements(coalesce(input_state->'tasks', '[]'::jsonb)) as task_item
+      where task_item->>'id' = existing.id
+    );
+end;
+$$;
+
+grant execute on function public.save_startflow_state(jsonb) to authenticated;

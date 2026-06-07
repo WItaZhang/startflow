@@ -257,6 +257,11 @@ export function createSupabaseRepository(client, userId) {
     async saveState(state) {
       const nextState = migrateState(state);
       await cache.saveState(nextState);
+      if (typeof client.rpc === "function") {
+        const result = await client.rpc("save_startflow_state", { input_state: nextState });
+        if (!result.error) return;
+        if (!isMissingRpcError(result.error)) throw result.error;
+      }
       await saveNormalizedState(client, userId, nextState);
     }
   };
@@ -279,6 +284,10 @@ async function loadLegacyUserState(client, userId) {
 
 function isMissingRelationError(error) {
   return error.code === "42P01" || error.code === "PGRST205" || /does not exist|schema cache/i.test(error.message || "");
+}
+
+function isMissingRpcError(error) {
+  return error.code === "PGRST202" || error.code === "42883" || /function .* does not exist|schema cache/i.test(error.message || "");
 }
 
 async function saveNormalizedState(client, userId, state) {

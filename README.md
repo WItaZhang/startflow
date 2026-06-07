@@ -60,6 +60,8 @@ RLS 已开启，所有表都只允许登录用户读写自己的 `user_id`。
 
 如果你之前运行过早期版本的 `public.user_states` JSON 表，应用会在首次加载时自动读取旧 state，并迁移写入新的规范化表。
 
+`supabase/schema.sql` 还会创建 `public.save_startflow_state(input_state jsonb)`，前端优先通过这个 RPC 在数据库事务里一次性保存设置、任务、日程和历史，避免多次请求造成半更新。
+
 ## Vercel 部署
 
 Vercel 推荐设置：

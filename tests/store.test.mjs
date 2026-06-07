@@ -123,6 +123,61 @@ test("supabase repository saves normalized rows and deletes stale rows", async (
   assert.equal(db.tables.task_history.length, 0);
 });
 
+test("supabase repository prefers atomic save RPC when available", async () => {
+  installMemoryStorage();
+  const calls = [];
+  const client = {
+    rpc(name, args) {
+      calls.push({ name, args });
+      return Promise.resolve({ error: null });
+    },
+    from() {
+      throw new Error("Fallback table writes should not run when RPC succeeds.");
+    }
+  };
+  const state = {
+    version: 1,
+    settings: {
+      wake: "08:00",
+      sleep: "23:00",
+      minBlock: 30,
+      maxBlock: 90,
+      dailyBuffer: 20,
+      deadlineBufferHours: 1
+    },
+    tasks: [],
+    events: []
+  };
+
+  await createSupabaseRepository(client, "user-1").saveState(state);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, "save_startflow_state");
+  assert.equal(calls[0].args.input_state.settings.wake, "08:00");
+});
+
+test("supabase repository falls back to table writes when save RPC is missing", async () => {
+  installMemoryStorage();
+  const db = createFakeSupabase();
+  db.client.rpc = () => Promise.resolve({ error: { code: "PGRST202", message: "function not found in schema cache" } });
+
+  await createSupabaseRepository(db.client, "user-1").saveState({
+    version: 1,
+    settings: {
+      wake: "09:00",
+      sleep: "23:00",
+      minBlock: 30,
+      maxBlock: 90,
+      dailyBuffer: 20,
+      deadlineBufferHours: 1
+    },
+    tasks: [],
+    events: []
+  });
+
+  assert.equal(db.tables.user_settings[0].wake, "09:00");
+});
+
 test("supabase repository loads normalized rows into app state", async () => {
   installMemoryStorage();
   const db = createFakeSupabase({
