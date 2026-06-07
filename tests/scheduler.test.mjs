@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildPlan } from "../src/domain/scheduler.js";
-import { validateTaskFits } from "../src/domain/taskValidation.js";
+import { validateEventImpact, validateTaskFits } from "../src/domain/taskValidation.js";
 
 test("scheduler avoids fixed events", () => {
   const state = {
@@ -282,6 +282,89 @@ test("task validation rejects a task that cannot fit", () => {
   assert.equal(result.ok, false);
   assert.equal(result.risk.type, "capacity");
   assert.equal(result.risk.remaining, 120);
+});
+
+test("event validation rejects a fixed event that creates new capacity risk", () => {
+  const state = {
+    settings: {
+      wake: "08:00",
+      sleep: "22:00",
+      minBlock: 60,
+      maxBlock: 60,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
+    },
+    tasks: [
+      {
+        id: "task-a",
+        title: "Morning task",
+        duration: 60,
+        doneMinutes: 0,
+        deadline: "2026-06-06T10:00:00",
+        mode: "auto",
+        dependsOn: "",
+        history: []
+      }
+    ],
+    events: []
+  };
+
+  const result = validateEventImpact(
+    state,
+    "",
+    {
+      title: "Class",
+      start: "2026-06-06T08:00:00",
+      end: "2026-06-06T09:30:00",
+      repeating: false
+    },
+    { now: "2026-06-06T08:00:00" }
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.risks.length, 1);
+  assert.equal(result.risks[0].taskId, "task-a");
+  assert.equal(result.risks[0].type, "capacity");
+});
+
+test("event validation ignores unchanged existing risks", () => {
+  const state = {
+    settings: {
+      wake: "08:00",
+      sleep: "09:00",
+      minBlock: 30,
+      maxBlock: 60,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
+    },
+    tasks: [
+      {
+        id: "old-risk",
+        title: "Already too large",
+        duration: 180,
+        doneMinutes: 0,
+        deadline: "2026-06-06T09:00:00",
+        mode: "auto",
+        dependsOn: "",
+        history: []
+      }
+    ],
+    events: []
+  };
+
+  const result = validateEventImpact(
+    state,
+    "",
+    {
+      title: "Dinner",
+      start: "2026-06-07T18:00:00",
+      end: "2026-06-07T19:00:00",
+      repeating: false
+    },
+    { now: "2026-06-06T08:00:00" }
+  );
+
+  assert.equal(result.ok, true);
 });
 
 test("scheduler accepts a 300 minute task when the available window is enough", () => {

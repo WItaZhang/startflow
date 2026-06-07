@@ -1,4 +1,4 @@
-import { formatTaskFitError, validateTaskFits } from "../domain/taskValidation.js";
+import { formatEventImpactError, formatTaskFitError, validateEventImpact, validateTaskFits } from "../domain/taskValidation.js";
 import { $, closeDialog, showToast } from "./dom.js";
 
 export function bindForms(store, getCurrentPlan) {
@@ -75,6 +75,10 @@ export function bindForms(store, getCurrentPlan) {
       end: end.toISOString(),
       repeating: Boolean(data.repeating)
     };
+    const impact = validateEventImpact(store.getState(), data.eventId, payload);
+    if (!impact.ok) {
+      return setFormError(form, formatEventImpactError(impact.risks, store.getState(), impact.plan.settings));
+    }
 
     if (data.eventId) {
       store.updateEvent(data.eventId, payload);
