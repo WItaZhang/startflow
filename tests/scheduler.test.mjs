@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildPlan } from "../src/domain/scheduler.js";
-import { validateEventImpact, validateTaskFits } from "../src/domain/taskValidation.js";
+import { validateEventImpact, validateSettingsImpact, validateTaskFits } from "../src/domain/taskValidation.js";
 
 test("scheduler avoids fixed events", () => {
   const state = {
@@ -360,6 +360,90 @@ test("event validation ignores unchanged existing risks", () => {
       start: "2026-06-07T18:00:00",
       end: "2026-06-07T19:00:00",
       repeating: false
+    },
+    { now: "2026-06-06T08:00:00" }
+  );
+
+  assert.equal(result.ok, true);
+});
+
+test("settings validation rejects settings that create new capacity risk", () => {
+  const state = {
+    settings: {
+      wake: "08:00",
+      sleep: "12:00",
+      minBlock: 60,
+      maxBlock: 60,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
+    },
+    tasks: [
+      {
+        id: "early-task",
+        title: "Early task",
+        duration: 60,
+        doneMinutes: 0,
+        deadline: "2026-06-06T09:30:00",
+        mode: "auto",
+        dependsOn: "",
+        history: []
+      }
+    ],
+    events: []
+  };
+
+  const result = validateSettingsImpact(
+    state,
+    {
+      wake: "09:00",
+      sleep: "12:00",
+      minBlock: 60,
+      maxBlock: 60,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
+    },
+    { now: "2026-06-06T08:00:00" }
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.risks.length, 1);
+  assert.equal(result.risks[0].taskId, "early-task");
+});
+
+test("settings validation ignores existing risks that do not worsen", () => {
+  const state = {
+    settings: {
+      wake: "08:00",
+      sleep: "09:00",
+      minBlock: 30,
+      maxBlock: 60,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
+    },
+    tasks: [
+      {
+        id: "old-risk",
+        title: "Already too large",
+        duration: 180,
+        doneMinutes: 0,
+        deadline: "2026-06-06T09:00:00",
+        mode: "auto",
+        dependsOn: "",
+        history: []
+      }
+    ],
+    events: []
+  };
+
+  const result = validateSettingsImpact(
+    state,
+    {
+      wake: "07:00",
+      sleep: "09:00",
+      minBlock: 30,
+      maxBlock: 60,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
     },
     { now: "2026-06-06T08:00:00" }
   );

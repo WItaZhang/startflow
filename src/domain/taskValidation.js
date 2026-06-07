@@ -48,6 +48,25 @@ export function validateEventImpact(state, eventId, payload, options = {}) {
   };
 }
 
+export function validateSettingsImpact(state, settings, options = {}) {
+  const candidateState = {
+    ...state,
+    settings: { ...state.settings, ...settings }
+  };
+  const now = options.now ? new Date(options.now) : new Date();
+  const horizonDays = horizonDaysForTasks(candidateState.tasks, now);
+  const previousPlan = buildPlan(state, { now, horizonDays });
+  const nextPlan = buildPlan(candidateState, { now, horizonDays });
+  const previousRisks = new Map(previousPlan.risks.map((risk) => [risk.taskId, risk]));
+  const risks = nextPlan.risks.filter((risk) => riskGotWorse(previousRisks.get(risk.taskId), risk));
+
+  return {
+    ok: risks.length === 0,
+    risks,
+    plan: nextPlan
+  };
+}
+
 export function formatTaskFitError(risk, settings = {}) {
   if (!risk) return "";
   if (risk.type === "dependency") {
@@ -71,6 +90,19 @@ export function formatEventImpactError(risks, state, settings = {}) {
   const buffer = Number(settings.deadlineBufferHours || 0);
   const bufferText = buffer > 0 ? ` 系统还会预留 ${buffer} 小时 DDL 提前量。` : "";
   return `这段固定安排会让「${title}」排不下，还差 ${remaining} 分钟${extraText}。请先调整任务 DDL、减少时长，或换一个不会冲突的日程时间。${bufferText}`;
+}
+
+export function formatSettingsImpactError(risks, state, settings = {}) {
+  const firstRisk = risks?.[0];
+  if (!firstRisk) return "";
+  const task = state.tasks.find((item) => item.id === firstRisk.taskId);
+  const title = task?.title || "未知任务";
+  const remaining = Number.isFinite(Number(firstRisk.remaining)) ? Number(firstRisk.remaining) : 0;
+  const extraCount = Math.max(0, risks.length - 1);
+  const extraText = extraCount ? `，另外还有 ${extraCount} 个任务受影响` : "";
+  const buffer = Number(settings.deadlineBufferHours || 0);
+  const bufferText = buffer > 0 ? ` 系统还会预留 ${buffer} 小时 DDL 提前量。` : "";
+  return `这组设置会让「${title}」排不下，还差 ${remaining} 分钟${extraText}。请放宽作息、缓冲或单次时长，或先调整任务。${bufferText}`;
 }
 
 function riskGotWorse(previousRisk, nextRisk) {

@@ -1,4 +1,11 @@
-import { formatEventImpactError, formatTaskFitError, validateEventImpact, validateTaskFits } from "../domain/taskValidation.js";
+import {
+  formatEventImpactError,
+  formatSettingsImpactError,
+  formatTaskFitError,
+  validateEventImpact,
+  validateSettingsImpact,
+  validateTaskFits
+} from "../domain/taskValidation.js";
 import { $, closeDialog, showToast } from "./dom.js";
 
 export function bindForms(store, getCurrentPlan) {
@@ -94,15 +101,24 @@ export function bindForms(store, getCurrentPlan) {
 
   $("#settingsForm").addEventListener("submit", (event) => {
     event.preventDefault();
-    const data = formData(event.currentTarget);
-    store.updateSettings({
+    const form = event.currentTarget;
+    clearFormError(form);
+    const data = formData(form);
+    const settings = {
       wake: data.wake,
       sleep: data.sleep,
       minBlock: Number(data.minBlock),
       maxBlock: Number(data.maxBlock),
       dailyBuffer: Number(data.dailyBuffer),
       deadlineBufferHours: Number(data.deadlineBuffer)
-    });
+    };
+    if (settings.minBlock > settings.maxBlock) return setFormError(form, "最短单次不能大于最长单次。");
+    const impact = validateSettingsImpact(store.getState(), settings);
+    if (!impact.ok) {
+      return setFormError(form, formatSettingsImpactError(impact.risks, store.getState(), impact.plan.settings));
+    }
+
+    store.updateSettings(settings);
     showToast("设置已保存，并重新生成计划。");
   });
 
