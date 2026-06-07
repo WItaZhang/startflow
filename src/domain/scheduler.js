@@ -1,6 +1,15 @@
+import { buildWorkUnits, normalizeBreakdownMode, normalizeEnergy, normalizePriority } from "./breakdown.js";
 import { addDays, addMinutes, atClock, minutesBetween, startOfDay } from "./time.js";
 
 const DEFAULT_HORIZON_DAYS = 21;
+const STARTER_MAX_MINUTES = 10;
+const STARTER_MIN_MINUTES = 5;
+const PRIORITY_SCORE = {
+  low: 0,
+  normal: 12,
+  high: 28,
+  urgent: 44
+};
 
 export function buildPlan(state, options = {}) {
   const now = options.now ? new Date(options.now) : new Date();
@@ -8,12 +17,13 @@ export function buildPlan(state, options = {}) {
   const settings = normalizeSettings(state.settings);
   const tasks = state.tasks.map(normalizeTask);
   const events = expandEvents(state.events, now, horizonDays);
-  const busy = [...events.map(eventToBusyBlock), ...buildSleepBlocks(settings, now, horizonDays)];
+  const sleepBlocks = buildSleepBlocks(settings, now, horizonDays);
+  const busy = [...events.map(eventToBusyBlock), ...sleepBlocks.map(eventToBusyBlock)];
   const blocks = [];
   const risks = [];
   const taskEndTimes = new Map();
 
-  for (const task of sortTasks(tasks)) {
+  for (const task of sortTasks(tasks, { now })) {
     const remaining = Math.max(0, task.duration - task.doneMinutes);
     if (remaining === 0) {
       taskEndTimes.set(task.id, now);
@@ -54,10 +64,13 @@ export function buildPlan(state, options = {}) {
   }
 
   return {
-    blocks: [...blocks, ...events, ...buildSleepBlocks(settings, now, horizonDays)]
-      .sort((a, b) => a.start - b.start),
+    blocks: [...blocks, ...events, ...sleepBlocks].sort((a, b) => a.start - b.start),
     risks,
-    settings
+    settings,
+    algorithm: {
+      version: "startflow-v2",
+      strategy: "semantic-units-weighted-slot-scheduling"
+    }
   };
 }
 
@@ -80,6 +93,9 @@ export function normalizeTask(task) {
     doneMinutes: numberOr(task.doneMinutes, 0),
     deadline: task.deadline,
     mode: task.mode || "auto",
+    breakdownMode: normalizeBreakdownMode(task.breakdownMode),
+    priority: normalizePriority(task.priority),
+    energy: normalizeEnergy(task.energy),
     dependsOn: task.dependsOn || "",
     minBlock: task.minBlock,
     maxBlock: task.maxBlock,
@@ -89,7 +105,8 @@ export function normalizeTask(task) {
   };
 }
 
-export function sortTasks(tasks) {
+export function sortTasks(tasks, options = {}) {
+  const now = options.now ? new Date(options.now) : new Date();
   const byId = new Map(tasks.map((task) => [task.id, task]));
   const visited = new Set();
   const visiting = new Set();
@@ -106,69 +123,100 @@ export function sortTasks(tasks) {
   };
 
   [...tasks]
-    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
+    .sort((a, b) => taskOrderScore(b, tasks, now) - taskOrderScore(a, tasks, now) || new Date(a.deadline) - new Date(b.deadline))
     .forEach(visit);
 
   return result;
 }
 
 function scheduleTask(task, { busy, settings, startAfter, latestEnd }) {
-  let remaining = Math.max(0, task.duration - task.doneMinutes);
+  const units = buildWorkUnits(task, settings);
+  let remaining = units.reduce((sum, unit) => sum + unit.minutes, 0);
   const blocks = [];
-  const minBlock = Math.max(10, numberOr(task.minBlock, settings.minBlock));
-  const maxBlock = Math.max(minBlock, numberOr(task.maxBlock, settings.maxBlock));
-  const targetBlock = chooseBlockSize(task, minBlock, maxBlock, remaining);
+  let cursor = startAfter;
 
   if (latestEnd <= startAfter) {
     return { blocks, remaining };
   }
 
-  while (remaining > 0) {
-    const isShortTail = remaining < minBlock && blocks.length > 0;
+  for (const unit of units) {
+    let unitRemaining = unit.minutes;
+    while (unitRemaining > 0) {
+      const limits = blockLimits(task, unit, settings);
+      const minMinutes = Math.min(limits.minBlock, unitRemaining);
+      const slot = findBestFreeSlot({
+        busy,
+        startAfter: cursor,
+        latestEnd,
+        minMinutes,
+        settings,
+        task,
+        unit
+      });
 
-    const slot = findNextFreeSlot({
-      busy,
-      startAfter: blocks.at(-1)?.end ?? startAfter,
-      latestEnd,
-      minMinutes: isShortTail ? remaining : Math.min(minBlock, remaining),
-      settings
-    });
+      if (!slot) {
+        return { blocks, remaining };
+      }
 
-    if (!slot) break;
+      const minutes = chooseBlockMinutes(task, unit, {
+        remaining: unitRemaining,
+        available: minutesBetween(slot.start, slot.end),
+        limits,
+        scheduledBlocks: blocks.length
+      });
 
-    let minutes = Math.min(remaining, targetBlock, minutesBetween(slot.start, slot.end));
-    if (isShortTail) {
-      minutes = remaining;
-    } else if (task.mode === "single" && remaining <= minutesBetween(slot.start, slot.end)) {
-      minutes = remaining;
+      if (minutes <= 0) {
+        return { blocks, remaining };
+      }
+
+      const block = {
+        id: cryptoId("block"),
+        type: "task",
+        taskId: task.id,
+        unitId: unit.id,
+        title: unit.isTimeUnit ? task.title : unit.title,
+        parentTitle: task.title,
+        start: slot.start,
+        end: addMinutes(slot.start, minutes),
+        minutes,
+        breakdownMode: task.breakdownMode,
+        priority: task.priority,
+        energy: unit.energy,
+        friction: unit.friction,
+        stage: unit.stage,
+        isStarter: unit.isStarter,
+        startHint: unit.startHint || task.startHint,
+        missedCount: task.missedCount,
+        score: Math.round(slot.score)
+      };
+
+      blocks.push(block);
+      busy.push(taskBlockToBusyBlock(block));
+      remaining -= minutes;
+      unitRemaining -= minutes;
+      cursor = block.end;
     }
-    if (!isShortTail && minutes < minBlock && remaining > minBlock) {
-      break;
-    }
-
-    const block = {
-      id: cryptoId("block"),
-      type: "task",
-      taskId: task.id,
-      title: task.title,
-      start: slot.start,
-      end: addMinutes(slot.start, minutes),
-      minutes,
-      startHint: task.startHint,
-      missedCount: task.missedCount
-    };
-
-    blocks.push(block);
-    busy.push(taskBlockToBusyBlock(block));
-    remaining -= minutes;
   }
 
   return { blocks, remaining };
 }
 
-function findNextFreeSlot({ busy, startAfter, latestEnd, minMinutes, settings }) {
+function findBestFreeSlot({ busy, startAfter, latestEnd, minMinutes, settings, task, unit }) {
+  const candidates = listFreeSlots({ busy, startAfter, latestEnd, minMinutes, settings });
+  if (!candidates.length) return null;
+
+  return candidates
+    .map((slot) => ({
+      ...slot,
+      score: scoreSlot(slot, { busy, startAfter, latestEnd, minMinutes, settings, task, unit })
+    }))
+    .sort((a, b) => b.score - a.score || a.start - b.start)[0];
+}
+
+function listFreeSlots({ busy, startAfter, latestEnd, minMinutes, settings }) {
   const cursorDay = startOfDay(startAfter);
   const lastDay = startOfDay(latestEnd);
+  const slots = [];
 
   for (let day = cursorDay; day <= lastDay; day = addDays(day, 1)) {
     const { dayStart, dayEnd } = availabilityWindow(day, settings, startAfter, latestEnd);
@@ -181,20 +229,37 @@ function findNextFreeSlot({ busy, startAfter, latestEnd, minMinutes, settings })
 
     for (const item of blocked) {
       if (minutesBetween(slotStart, item.start) >= minMinutes) {
-        return { start: slotStart, end: new Date(Math.min(item.start.getTime(), dayEnd.getTime())) };
+        slots.push({ start: slotStart, end: new Date(Math.min(item.start.getTime(), dayEnd.getTime())) });
       }
       if (item.end > slotStart) slotStart = item.end;
     }
 
     if (minutesBetween(slotStart, dayEnd) >= minMinutes) {
-      return { start: slotStart, end: dayEnd };
+      slots.push({ start: slotStart, end: dayEnd });
     }
   }
 
-  return null;
+  return slots;
 }
 
-function chooseBlockSize(task, minBlock, maxBlock, remaining) {
+function chooseBlockMinutes(task, unit, { remaining, available, limits, scheduledBlocks }) {
+  const shortTail = remaining < limits.minBlock && (scheduledBlocks > 0 || !unit.isTimeUnit);
+  if (shortTail || unit.isStarter || !unit.canSplit) {
+    return Math.min(remaining, available);
+  }
+
+  if (unit.isTimeUnit) {
+    const targetBlock = chooseTimeBlockSize(task, limits.minBlock, limits.maxBlock, remaining);
+    const minutes = Math.min(remaining, targetBlock, available);
+    if (minutes < limits.minBlock && remaining > limits.minBlock) return 0;
+    return minutes;
+  }
+
+  const target = Math.min(limits.maxBlock, Math.max(limits.minBlock, Math.ceil(remaining / Math.ceil(remaining / limits.maxBlock))));
+  return Math.min(remaining, target, available);
+}
+
+function chooseTimeBlockSize(task, minBlock, maxBlock, remaining) {
   if (task.mode === "single") return remaining;
   if (remaining <= minBlock) return remaining;
   const minimumParts = Math.ceil(remaining / maxBlock);
@@ -203,6 +268,92 @@ function chooseBlockSize(task, minBlock, maxBlock, remaining) {
   if (task.mode === "split") return Math.min(maxBlock, Math.max(minBlock, Math.ceil(remaining / 3)));
   if (remaining <= maxBlock) return remaining;
   return Math.min(maxBlock, Math.max(minBlock, 60));
+}
+
+function blockLimits(task, unit, settings) {
+  const baseMin = Math.max(10, numberOr(task.minBlock, settings.minBlock));
+  const baseMax = Math.max(baseMin, numberOr(task.maxBlock, settings.maxBlock));
+  const missedReduction = Math.min(30, task.missedCount * 10);
+  const maxBlock = unit.isStarter ? STARTER_MAX_MINUTES : Math.max(baseMin, baseMax - missedReduction);
+  const minBlock = unit.isStarter ? Math.min(STARTER_MIN_MINUTES, unit.minutes) : baseMin;
+
+  return {
+    minBlock: Math.max(1, Math.min(minBlock, unit.minutes)),
+    maxBlock: Math.max(1, Math.min(maxBlock, unit.minutes))
+  };
+}
+
+function scoreSlot(slot, { busy, startAfter, latestEnd, minMinutes, settings, task, unit }) {
+  const delayHours = minutesBetween(startAfter, slot.start) / 60;
+  const slotMinutes = minutesBetween(slot.start, slot.end);
+  const hoursToDeadline = Math.max(0.25, minutesBetween(slot.start, latestEnd) / 60);
+  const leftover = slotMinutes - minMinutes;
+  const previous = nearestPreviousBusy(busy, slot.start);
+  const next = nearestNextBusy(busy, slot.end);
+
+  let score = 100;
+  score += PRIORITY_SCORE[task.priority] || 0;
+  score += dependencyUnlockValue(task, busy);
+  score += Math.min(36, 160 / (hoursToDeadline + 2));
+  score += energyFitScore(unit.energy, slot.start);
+  score -= delayHours * (task.priority === "urgent" ? 2.4 : 1.2);
+  score -= unit.friction * Math.min(12, delayHours * 0.8);
+  score -= task.missedCount * Math.min(10, delayHours);
+
+  if (leftover > 0 && leftover < settings.minBlock) score -= 8;
+  if (previous?.taskId === task.id) score += 10;
+  if (next?.taskId === task.id) score += 6;
+  if (previous?.taskId && previous.taskId !== task.id && minutesBetween(previous.end, slot.start) <= 10) score -= 4;
+  if (unit.isStarter) score -= delayHours * 2;
+
+  return score;
+}
+
+function energyFitScore(energy, date) {
+  const hour = date.getHours() + date.getMinutes() / 60;
+  if (energy === "high") {
+    if (hour >= 8.5 && hour <= 11.5) return 18;
+    if (hour >= 13 && hour <= 16.5) return 10;
+    if (hour >= 19) return -8;
+    return 2;
+  }
+  if (energy === "medium") {
+    if (hour >= 9 && hour <= 17.5) return 12;
+    if (hour >= 19 && hour <= 22) return 3;
+    return 0;
+  }
+  if (energy === "low") {
+    if (hour >= 16 && hour <= 22.5) return 12;
+    if (hour >= 9 && hour <= 15.5) return 6;
+    return 2;
+  }
+  return 0;
+}
+
+function taskOrderScore(task, tasks, now) {
+  const deadline = new Date(task.deadline);
+  const hoursToDeadline = Math.max(0.25, (deadline.getTime() - now.getTime()) / (60 * 60 * 1000));
+  const deadlinePressure = Math.min(80, 260 / (hoursToDeadline + 4));
+  const dependentCount = tasks.filter((item) => item.dependsOn === task.id).length;
+  const frictionBoost = Math.min(18, task.missedCount * 5);
+
+  return deadlinePressure + (PRIORITY_SCORE[task.priority] || 0) + dependentCount * 10 + frictionBoost - task.duration / 600;
+}
+
+function dependencyUnlockValue(task, busy) {
+  return busy.some((item) => item.taskId === task.id) ? 4 : 0;
+}
+
+function nearestPreviousBusy(busy, start) {
+  return busy
+    .filter((item) => item.end <= start)
+    .sort((a, b) => b.end - a.end)[0];
+}
+
+function nearestNextBusy(busy, end) {
+  return busy
+    .filter((item) => item.start >= end)
+    .sort((a, b) => a.start - b.start)[0];
 }
 
 function dependencyReadyAt(task, taskEndTimes, tasks) {
@@ -290,11 +441,11 @@ function copyTime(day, source) {
 }
 
 function eventToBusyBlock(event) {
-  return { start: event.start, end: event.end, type: "event" };
+  return { start: event.start, end: event.end, type: event.type || "event", taskId: event.taskId };
 }
 
 function taskBlockToBusyBlock(block) {
-  return { start: block.start, end: block.end, type: "task" };
+  return { start: block.start, end: block.end, type: "task", taskId: block.taskId, unitId: block.unitId };
 }
 
 function numberOr(value, fallback) {

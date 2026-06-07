@@ -91,6 +91,9 @@ test("supabase repository saves normalized rows and deletes stale rows", async (
         doneMinutes: 30,
         deadline: "2026-06-08T18:00:00.000Z",
         mode: "auto",
+        breakdownMode: "semantic",
+        priority: "high",
+        energy: "high",
         dependsOn: "",
         minBlock: 30,
         maxBlock: 60,
@@ -116,6 +119,9 @@ test("supabase repository saves normalized rows and deletes stale rows", async (
   assert.equal(db.tables.events.length, 1);
   assert.equal(db.tables.task_history.length, 1);
   assert.equal(db.tables.tasks[0].done_minutes, 30);
+  assert.equal(db.tables.tasks[0].breakdown_mode, "semantic");
+  assert.equal(db.tables.tasks[0].priority, "high");
+  assert.equal(db.tables.tasks[0].energy, "high");
 
   await repository.saveState({ ...state, tasks: [], events: [] });
   assert.equal(db.tables.tasks.length, 0);
@@ -201,6 +207,9 @@ test("supabase repository loads normalized rows into app state", async () => {
         done_minutes: 60,
         deadline: "2026-06-09T20:00:00.000Z",
         mode: "split",
+        breakdown_mode: "semantic",
+        priority: "urgent",
+        energy: "medium",
         depends_on: null,
         min_block: 30,
         max_block: 90,
@@ -234,6 +243,9 @@ test("supabase repository loads normalized rows into app state", async () => {
   assert.equal(state.settings.wake, "08:30");
   assert.equal(state.tasks[0].title, "Exam prep");
   assert.equal(state.tasks[0].doneMinutes, 60);
+  assert.equal(state.tasks[0].breakdownMode, "semantic");
+  assert.equal(state.tasks[0].priority, "urgent");
+  assert.equal(state.tasks[0].energy, "medium");
   assert.equal(state.tasks[0].history[0].label, "完成");
   assert.equal(state.events[0].title, "Lunch");
 });

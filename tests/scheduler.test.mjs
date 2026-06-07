@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { buildWorkUnits } from "../src/domain/breakdown.js";
 import { buildPlan } from "../src/domain/scheduler.js";
 import { validateEventImpact, validateSettingsImpact, validateTaskFits, wouldCreateDependencyCycle } from "../src/domain/taskValidation.js";
 
@@ -645,6 +646,108 @@ test("task validation only blocks the task being saved", () => {
   );
 
   assert.equal(result.ok, true);
+});
+
+test("semantic breakdown creates a low-friction starter unit", () => {
+  const task = {
+    id: "paper",
+    title: "写论文初稿",
+    duration: 120,
+    doneMinutes: 0,
+    deadline: "2026-06-08T20:00:00.000Z",
+    mode: "auto",
+    breakdownMode: "semantic",
+    priority: "normal",
+    energy: "auto",
+    missedCount: 0,
+    history: []
+  };
+
+  const units = buildWorkUnits(task, { minBlock: 30, maxBlock: 60 });
+
+  assert.ok(units.length > 1);
+  assert.equal(units[0].isStarter, true);
+  assert.ok(units[0].minutes <= 10);
+  assert.match(units[0].title, /启动/);
+  assert.equal(units.reduce((sum, unit) => sum + unit.minutes, 0), 120);
+});
+
+test("scheduler prioritizes urgent tasks when deadlines are equal", () => {
+  const state = {
+    settings: {
+      wake: "08:00",
+      sleep: "18:00",
+      minBlock: 30,
+      maxBlock: 30,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
+    },
+    tasks: [
+      {
+        id: "low",
+        title: "Low priority",
+        duration: 30,
+        doneMinutes: 0,
+        deadline: "2026-06-06T17:00:00",
+        mode: "auto",
+        priority: "low",
+        dependsOn: "",
+        history: []
+      },
+      {
+        id: "urgent",
+        title: "Urgent task",
+        duration: 30,
+        doneMinutes: 0,
+        deadline: "2026-06-06T17:00:00",
+        mode: "auto",
+        priority: "urgent",
+        dependsOn: "",
+        history: []
+      }
+    ],
+    events: []
+  };
+
+  const plan = buildPlan(state, { now: "2026-06-06T08:00:00", horizonDays: 1 });
+  const taskBlocks = plan.blocks.filter((block) => block.type === "task");
+
+  assert.equal(taskBlocks[0].taskId, "urgent");
+  assert.equal(taskBlocks[1].taskId, "low");
+});
+
+test("scheduler shortens block size after missed attempts", () => {
+  const state = {
+    settings: {
+      wake: "08:00",
+      sleep: "22:00",
+      minBlock: 30,
+      maxBlock: 90,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
+    },
+    tasks: [
+      {
+        id: "avoidance",
+        title: "拖延任务",
+        duration: 160,
+        doneMinutes: 0,
+        deadline: "2026-06-06T22:00:00",
+        mode: "auto",
+        missedCount: 2,
+        dependsOn: "",
+        history: []
+      }
+    ],
+    events: []
+  };
+
+  const plan = buildPlan(state, { now: "2026-06-06T08:00:00", horizonDays: 1 });
+  const taskBlocks = plan.blocks.filter((block) => block.type === "task");
+
+  assert.equal(plan.risks.length, 0);
+  assert.ok(taskBlocks.length >= 3);
+  assert.ok(taskBlocks.every((block) => block.minutes <= 70));
 });
 
 function overlaps(left, right) {

@@ -31,6 +31,9 @@ create table if not exists public.tasks (
   done_minutes integer not null default 0 check (done_minutes >= 0),
   deadline timestamptz not null,
   mode text not null default 'auto' check (mode in ('auto', 'single', 'split')),
+  breakdown_mode text not null default 'time' check (breakdown_mode in ('time', 'semantic')),
+  priority text not null default 'normal' check (priority in ('low', 'normal', 'high', 'urgent')),
+  energy text not null default 'auto' check (energy in ('auto', 'low', 'medium', 'high')),
   depends_on text,
   min_block integer check (min_block is null or min_block >= 10),
   max_block integer check (max_block is null or max_block >= 10),
@@ -42,6 +45,15 @@ create table if not exists public.tasks (
   check (done_minutes <= duration),
   check (min_block is null or max_block is null or min_block <= max_block)
 );
+
+alter table public.tasks
+  add column if not exists breakdown_mode text not null default 'time' check (breakdown_mode in ('time', 'semantic'));
+
+alter table public.tasks
+  add column if not exists priority text not null default 'normal' check (priority in ('low', 'normal', 'high', 'urgent'));
+
+alter table public.tasks
+  add column if not exists energy text not null default 'auto' check (energy in ('auto', 'low', 'medium', 'high'));
 
 create index if not exists tasks_user_deadline_idx on public.tasks(user_id, deadline);
 
@@ -229,6 +241,9 @@ begin
     done_minutes,
     deadline,
     mode,
+    breakdown_mode,
+    priority,
+    energy,
     depends_on,
     min_block,
     max_block,
@@ -243,6 +258,9 @@ begin
     least(coalesce((task_item->>'doneMinutes')::integer, 0), coalesce((task_item->>'duration')::integer, 0)),
     (task_item->>'deadline')::timestamptz,
     coalesce(task_item->>'mode', 'auto'),
+    coalesce(task_item->>'breakdownMode', 'time'),
+    coalesce(task_item->>'priority', 'normal'),
+    coalesce(task_item->>'energy', 'auto'),
     nullif(task_item->>'dependsOn', ''),
     nullif(task_item->>'minBlock', '')::integer,
     nullif(task_item->>'maxBlock', '')::integer,
@@ -256,6 +274,9 @@ begin
     done_minutes = excluded.done_minutes,
     deadline = excluded.deadline,
     mode = excluded.mode,
+    breakdown_mode = excluded.breakdown_mode,
+    priority = excluded.priority,
+    energy = excluded.energy,
     depends_on = excluded.depends_on,
     min_block = excluded.min_block,
     max_block = excluded.max_block,

@@ -358,6 +358,9 @@ function stateFromSupabaseRows({ settings, tasks, events, history }) {
       doneMinutes: Number(task.done_minutes || 0),
       deadline: task.deadline,
       mode: task.mode,
+      breakdownMode: task.breakdown_mode || "time",
+      priority: task.priority || "normal",
+      energy: task.energy || "auto",
       dependsOn: task.depends_on || "",
       minBlock: nullableNumber(task.min_block),
       maxBlock: nullableNumber(task.max_block),
@@ -396,6 +399,9 @@ function taskToSupabaseRow(userId, task) {
     done_minutes: Math.min(task.doneMinutes || 0, task.duration),
     deadline: task.deadline,
     mode: task.mode || "auto",
+    breakdown_mode: task.breakdownMode === "semantic" ? "semantic" : "time",
+    priority: normalizePriority(task.priority),
+    energy: normalizeEnergy(task.energy),
     depends_on: task.dependsOn || null,
     min_block: nullableNumber(task.minBlock),
     max_block: nullableNumber(task.maxBlock),
@@ -446,7 +452,14 @@ export function migrateState(state) {
       dailyBuffer: Number(state?.settings?.dailyBuffer ?? 30),
       deadlineBufferHours: Number(state?.settings?.deadlineBufferHours ?? 2)
     },
-    tasks: Array.isArray(state?.tasks) ? state.tasks : [],
+    tasks: Array.isArray(state?.tasks)
+      ? state.tasks.map((task) => ({
+          ...task,
+          breakdownMode: task.breakdownMode === "semantic" ? "semantic" : "time",
+          priority: normalizePriority(task.priority),
+          energy: normalizeEnergy(task.energy)
+        }))
+      : [],
     events: Array.isArray(state?.events) ? state.events : []
   };
 }
@@ -474,6 +487,9 @@ export function sampleState() {
         doneMinutes: 0,
         deadline: iso(atClock(addDays(today, 2), "20:00")),
         mode: "split",
+        breakdownMode: "semantic",
+        priority: "high",
+        energy: "medium",
         dependsOn: "",
         startHint: "打开资料列表，先读第一段",
         missedCount: 0,
@@ -486,6 +502,9 @@ export function sampleState() {
         doneMinutes: 0,
         deadline: iso(atClock(addDays(today, 5), "22:00")),
         mode: "auto",
+        breakdownMode: "semantic",
+        priority: "normal",
+        energy: "high",
         dependsOn: taskA,
         startHint: "打开文档，先写标题和三个小标题",
         missedCount: 0,
@@ -498,6 +517,9 @@ export function sampleState() {
         doneMinutes: 30,
         deadline: iso(atClock(addDays(today, 3), "23:00")),
         mode: "split",
+        breakdownMode: "time",
+        priority: "urgent",
+        energy: "high",
         dependsOn: "",
         startHint: "先把题目和数据文件打开",
         missedCount: 1,
@@ -537,6 +559,14 @@ function readStoredState(key) {
   } catch {
     return null;
   }
+}
+
+function normalizePriority(value) {
+  return ["low", "normal", "high", "urgent"].includes(value) ? value : "normal";
+}
+
+function normalizeEnergy(value) {
+  return ["auto", "low", "medium", "high"].includes(value) ? value : "auto";
 }
 
 function historyItem(label, minutes) {

@@ -64,6 +64,10 @@
           <span class="material-symbols-outlined">settings</span>
           <span>设置</span>
         </button>
+        <button class="nav-item" data-view="algorithm">
+          <span class="material-symbols-outlined">account_tree</span>
+          <span>算法</span>
+        </button>
       </nav>
       <div class="profile">
         <div class="avatar">凡</div>
@@ -270,6 +274,27 @@
             </section>
           </div>
         </section>
+
+        <section class="view" id="algorithmView">
+          <div class="algorithm-layout">
+            <section class="panel algorithm-hero">
+              <div>
+                <p class="eyebrow">StartFlow Algorithm v2</p>
+                <h3>从“大任务”到“能开始的时间块”</h3>
+              </div>
+              <p>
+                系统先把任务转成工作单元，再按 DDL、优先级、依赖、能量需求和启动摩擦对时间槽评分。直接按时长的任务不会被语义改写；按语义步骤的任务会生成启动块、推进块和收尾块。
+              </p>
+              <div class="formula-strip">
+                <span>slotScore</span>
+                <strong>= DDL压力 + 优先级 + 依赖解锁 + 能量匹配 - 启动摩擦 - 延迟惩罚 - 碎片惩罚</strong>
+              </div>
+            </section>
+
+            <section class="algorithm-grid" id="algorithmModules"></section>
+            <section class="panel" id="algorithmMetrics"></section>
+          </div>
+        </section>
       </main>
     </div>
 
@@ -314,6 +339,32 @@
               <option value="single">尽量一次做完</option>
               <option value="split">不要一次做完</option>
             </select>
+          </label>
+          <label>
+            优先级
+            <select name="priority">
+              <option value="normal">普通</option>
+              <option value="high">重要</option>
+              <option value="urgent">紧急</option>
+              <option value="low">低优先</option>
+            </select>
+          </label>
+          <label>
+            能量需求
+            <select name="energy">
+              <option value="auto">系统判断</option>
+              <option value="high">高能量</option>
+              <option value="medium">中等能量</option>
+              <option value="low">低能量</option>
+            </select>
+          </label>
+          <label class="form-span">
+            拆分依据
+            <input type="hidden" name="breakdownMode" value="time" />
+            <div class="breakdown-toggle" data-breakdown-toggle>
+              <button type="button" data-breakdown-choice="time">直接按时长</button>
+              <button type="button" data-breakdown-choice="semantic">按语义步骤</button>
+            </div>
           </label>
           <label>
             依赖任务

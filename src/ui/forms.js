@@ -14,6 +14,7 @@ export function bindForms(store, getCurrentPlan) {
   const eventModal = $("#eventModal");
   const partialModal = $("#partialModal");
   setupDateTimeControls();
+  setupBreakdownControls();
 
   ["#openTaskModal", "#openTaskModal2", "#fab"].forEach((selector) => {
     $(selector).addEventListener("click", () => openTaskModal(taskModal));
@@ -47,6 +48,9 @@ export function bindForms(store, getCurrentPlan) {
       duration: Number(data.duration),
       deadline: deadline.toISOString(),
       mode: data.mode,
+      breakdownMode: data.breakdownMode === "semantic" ? "semantic" : "time",
+      priority: normalizePriorityInput(data.priority),
+      energy: normalizeEnergyInput(data.energy),
       dependsOn: data.dependsOn,
       minBlock: optionalNumber(data.minBlock),
       maxBlock: optionalNumber(data.maxBlock),
@@ -174,6 +178,9 @@ function openTaskModal(modal, task = null) {
   form.duration.value = task?.duration ?? 90;
   setDateTimeControl(form, "deadline", task ? new Date(task.deadline) : deadline);
   form.mode.value = task?.mode || "auto";
+  form.priority.value = task?.priority || "normal";
+  form.energy.value = task?.energy || "auto";
+  setBreakdownMode(form, task?.breakdownMode || "time");
   form.dependsOn.value = task?.dependsOn || "";
   form.minBlock.value = task?.minBlock ?? "";
   form.maxBlock.value = task?.maxBlock ?? "";
@@ -206,6 +213,14 @@ function formData(form) {
 
 function optionalNumber(value) {
   return value === "" || value == null ? undefined : Number(value);
+}
+
+function normalizePriorityInput(value) {
+  return ["low", "normal", "high", "urgent"].includes(value) ? value : "normal";
+}
+
+function normalizeEnergyInput(value) {
+  return ["auto", "low", "medium", "high"].includes(value) ? value : "auto";
 }
 
 function setFormError(form, message) {
@@ -247,6 +262,37 @@ function setupDateTimeControls() {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeDateTimePopovers();
+  });
+}
+
+function setupBreakdownControls() {
+  document.querySelectorAll("[data-breakdown-toggle]").forEach((toggle) => {
+    const form = toggle.closest("form");
+    const field = form?.elements.breakdownMode;
+    if (!form || !field || toggle.dataset.enhanced) return;
+
+    toggle.dataset.enhanced = "true";
+    toggle.querySelectorAll("[data-breakdown-choice]").forEach((button) => {
+      button.addEventListener("click", () => {
+        field.value = button.dataset.breakdownChoice === "semantic" ? "semantic" : "time";
+        renderBreakdownToggle(toggle, field.value);
+      });
+    });
+    renderBreakdownToggle(toggle, field.value || "time");
+  });
+}
+
+function setBreakdownMode(form, mode) {
+  const field = form.elements.breakdownMode;
+  const toggle = form.querySelector("[data-breakdown-toggle]");
+  const value = mode === "semantic" ? "semantic" : "time";
+  if (field) field.value = value;
+  if (toggle) renderBreakdownToggle(toggle, value);
+}
+
+function renderBreakdownToggle(toggle, mode) {
+  toggle.querySelectorAll("[data-breakdown-choice]").forEach((option) => {
+    option.classList.toggle("active", option.dataset.breakdownChoice === mode);
   });
 }
 

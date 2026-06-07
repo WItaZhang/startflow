@@ -1028,6 +1028,32 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(65, 98, 121, 0.12);
 }
 
+.breakdown-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  min-height: 46px;
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  background: var(--surface-mid);
+  padding: 4px;
+}
+
+.breakdown-toggle button {
+  min-height: 36px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.breakdown-toggle button.active {
+  background: var(--white);
+  color: var(--primary-dark);
+  box-shadow: 0 3px 10px rgba(25, 28, 30, 0.06);
+}
+
 .datetime-wheel {
   position: relative;
 }
@@ -1264,6 +1290,102 @@ select:focus {
   color: var(--text);
 }
 
+.algorithm-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.algorithm-hero {
+  display: grid;
+  gap: 16px;
+}
+
+.algorithm-hero p {
+  max-width: 940px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.formula-strip {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid rgba(65, 98, 121, 0.2);
+  border-radius: 8px;
+  background: rgba(199, 231, 255, 0.28);
+}
+
+.formula-strip span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.formula-strip strong {
+  color: var(--primary-dark);
+  line-height: 1.5;
+}
+
+.algorithm-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.algorithm-card {
+  display: grid;
+  gap: 8px;
+  min-height: 138px;
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  background: var(--white);
+  padding: 16px;
+  box-shadow: 0 8px 20px rgba(40, 74, 96, 0.06);
+}
+
+.algorithm-card strong {
+  color: var(--primary-dark);
+}
+
+.algorithm-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.algorithm-summary {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.algorithm-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.algorithm-flow article {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--surface-low);
+}
+
+.algorithm-flow span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .confirm-copy {
   margin: 0;
   color: var(--muted);
@@ -1482,7 +1604,14 @@ select:focus {
 
   .form-grid,
   .block-actions,
-  .insight-summary {
+  .insight-summary,
+  .algorithm-grid,
+  .algorithm-summary,
+  .algorithm-flow {
+    grid-template-columns: 1fr;
+  }
+
+  .formula-strip {
     grid-template-columns: 1fr;
   }
 

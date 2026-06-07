@@ -1,5 +1,6 @@
 import { addDays, atClock, formatDate, formatMonth, formatRange, formatTime, minutesBetween, startOfDay } from "../domain/time.js";
 import { formatTaskFitError, wouldCreateDependencyCycle } from "../domain/taskValidation.js";
+import { buildWorkUnits } from "../domain/breakdown.js";
 import { $, escapeHtml } from "./dom.js";
 
 export function renderApp({ state, plan, selectedView, calendarDate, actions }) {
@@ -11,6 +12,7 @@ export function renderApp({ state, plan, selectedView, calendarDate, actions }) 
   renderCalendar(plan, calendarDate);
   renderSettings(state);
   renderTaskDependencyOptions(state);
+  renderAlgorithmPage(state, plan);
   updateViewTitles(selectedView);
 }
 
@@ -212,7 +214,7 @@ function renderTaskCard(task, state) {
       <span class="status-pill ${statusClass}">${statusText}</span>
     </div>
     <div class="task-progress"><span style="width: ${percent}%"></span></div>
-    <div class="block-meta">${done}/${task.duration} 分钟 · ${modeLabel(task.mode)}${dependency ? ` · 依赖：${escapeHtml(dependency)}` : ""}</div>
+    <div class="block-meta">${done}/${task.duration} 分钟 · ${priorityLabel(task.priority)} · ${energyLabel(task.energy)} · ${modeLabel(task.mode)} · ${breakdownModeLabel(task.breakdownMode)}${dependency ? ` · 依赖：${escapeHtml(dependency)}` : ""}</div>
     <div class="card-actions">
       <button class="mini-button partial" data-task-action="edit" data-task-id="${escapeHtml(task.id)}">编辑</button>
       <button class="mini-button done" data-task-action="done" data-task-id="${escapeHtml(task.id)}">标记完成</button>
@@ -297,7 +299,8 @@ function updateViewTitles(selectedView) {
     today: ["今日概览", "把今天变成能开始的几个时间块"],
     tasks: ["任务库", "管理任务、依赖和不可用时间"],
     calendar: ["日历", "查看自动排好的整月计划"],
-    settings: ["设置", "调整睡眠时间和排程偏好"]
+    settings: ["设置", "调整睡眠时间和排程偏好"],
+    algorithm: ["算法详情", "StartFlow 如何拆分、评分和排程"]
   };
   const [eyebrow, title] = titles[selectedView] || titles.today;
   $("#viewEyebrow").textContent = eyebrow;
@@ -408,6 +411,86 @@ function modeLabel(mode) {
     single: "尽量一次做完",
     split: "不要一次做完"
   }[mode] || "系统帮我安排";
+}
+
+function breakdownModeLabel(mode) {
+  return mode === "semantic" ? "按语义步骤" : "直接按时长";
+}
+
+function renderAlgorithmPage(state, plan) {
+  const unfinishedTasks = state.tasks.filter((task) => task.doneMinutes < task.duration);
+  const workUnits = unfinishedTasks.flatMap((task) => buildWorkUnits(task, plan.settings));
+  const taskBlocks = plan.blocks.filter((block) => block.type === "task");
+  const semanticCount = unfinishedTasks.filter((task) => task.breakdownMode === "semantic").length;
+  const starterCount = taskBlocks.filter((block) => block.isStarter).length;
+  const highEnergyCount = taskBlocks.filter((block) => block.energy === "high").length;
+  const modules = [
+    ["任务拆解层", "直接按时长保留原任务；按语义步骤生成启动、推进、检查和收尾工作单元。"],
+    ["估时校准层", "失败记录会降低单次块长、提高提前安排权重，让重排更贴近真实执行能力。"],
+    ["评分排程层", "每个可用时间槽都会被打分，综合 DDL、优先级、能量匹配、依赖和碎片化成本。"],
+    ["反馈重排层", "完成、部分完成和没能做到都会写入历史；下一次 buildPlan 会使用最新进度。"]
+  ];
+
+  $("#algorithmModules").innerHTML = modules
+    .map(
+      ([title, body]) => `<article class="algorithm-card">
+        <strong>${title}</strong>
+        <p>${body}</p>
+      </article>`
+    )
+    .join("");
+
+  $("#algorithmMetrics").innerHTML = `
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">当前计划指标</p>
+        <h3>实时算法输出</h3>
+      </div>
+    </div>
+    <div class="insight-summary algorithm-summary">
+      <div><strong>${unfinishedTasks.length}</strong><span>未完成任务</span></div>
+      <div><strong>${workUnits.length}</strong><span>工作单元</span></div>
+      <div><strong>${taskBlocks.length}</strong><span>已排时间块</span></div>
+      <div><strong>${semanticCount}</strong><span>语义拆解任务</span></div>
+      <div><strong>${starterCount}</strong><span>启动块</span></div>
+      <div><strong>${highEnergyCount}</strong><span>高能量块</span></div>
+    </div>
+    <div class="algorithm-flow">
+      <article>
+        <b>1. Normalize</b>
+        <span>清洗任务字段、老数据默认值和依赖关系。</span>
+      </article>
+      <article>
+        <b>2. Breakdown</b>
+        <span>根据拆分依据生成 time unit 或 semantic work units。</span>
+      </article>
+      <article>
+        <b>3. Rank</b>
+        <span>按 DDL 压力、优先级、依赖解锁和失败记录排序。</span>
+      </article>
+      <article>
+        <b>4. Fit</b>
+        <span>枚举空档，选择评分最高且满足容量约束的时间槽。</span>
+      </article>
+    </div>`;
+}
+
+function priorityLabel(priority) {
+  return {
+    low: "低优先",
+    normal: "普通",
+    high: "重要",
+    urgent: "紧急"
+  }[priority] || "普通";
+}
+
+function energyLabel(energy) {
+  return {
+    auto: "系统判断能量",
+    low: "低能量",
+    medium: "中等能量",
+    high: "高能量"
+  }[energy] || "系统判断能量";
 }
 
 function dayKey(date) {
