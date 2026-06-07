@@ -305,11 +305,12 @@
         <div class="modal-head">
           <div>
             <p class="eyebrow">不可用时间</p>
-            <h3>新建日程</h3>
+            <h3 id="eventModalTitle">新建日程</h3>
           </div>
           <button class="icon-button" value="cancel" type="button" data-close-modal aria-label="关闭"><span class="material-symbols-outlined">close</span></button>
         </div>
         <div class="form-error" data-form-error hidden></div>
+        <input type="hidden" name="eventId" />
         <div class="form-grid">
           <label class="form-span">
             日程名
@@ -330,7 +331,7 @@
         </div>
         <div class="modal-actions">
           <button class="button secondary" value="cancel" type="button" data-close-modal>取消</button>
-          <button class="button primary" value="default" type="submit">保存并重排</button>
+          <button class="button primary" value="default" type="submit" id="eventSubmitLabel">保存并重排</button>
         </div>
       </form>
     </dialog>

@@ -143,6 +143,7 @@ function renderEventLibrary(state, actions) {
               <span class="tag">${event.repeating ? "每周" : "单次"}</span>
             </div>
             <div class="card-actions">
+              <button class="mini-button partial" data-event-action="edit" data-event-id="${escapeHtml(event.id)}">编辑</button>
               <button class="mini-button miss" data-event-action="delete" data-event-id="${escapeHtml(event.id)}">删除</button>
             </div>
           </article>`
@@ -190,9 +191,14 @@ function renderSettings(state) {
 
 function renderTaskDependencyOptions(state) {
   const select = $("#dependsSelect");
+  const currentValue = select.value;
+  const editingTaskId = $("#taskForm")?.taskId?.value || "";
   select.innerHTML = `<option value="">无</option>${state.tasks
-    .map((task) => `<option value="${escapeHtml(task.id)}">${escapeHtml(task.title)}</option>`)
+    .map((task) => `<option value="${escapeHtml(task.id)}" ${task.id === editingTaskId ? "disabled" : ""}>${escapeHtml(task.title)}</option>`)
     .join("")}`;
+  if ([...select.options].some((option) => option.value === currentValue && !option.disabled)) {
+    select.value = currentValue;
+  }
 }
 
 function updateViewTitles(selectedView) {

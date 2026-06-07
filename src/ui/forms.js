@@ -64,15 +64,23 @@ export function bindForms(store, getCurrentPlan) {
       return setFormError(form, "请填写有效的开始和结束时间，结束时间必须晚于开始时间。");
     }
 
-    store.addEvent({
+    const payload = {
       title: data.title.trim(),
       start: start.toISOString(),
       end: end.toISOString(),
       repeating: Boolean(data.repeating)
-    });
+    };
+
+    if (data.eventId) {
+      store.updateEvent(data.eventId, payload);
+      showToast("日程已更新，并重新排程。");
+    } else {
+      store.addEvent(payload);
+      showToast("日程已保存，排程会避开这段时间。");
+    }
+
     closeDialog(eventModal);
     form.reset();
-    showToast("日程已保存，排程会避开这段时间。");
   });
 
   $("#settingsForm").addEventListener("submit", (event) => {
@@ -110,6 +118,10 @@ export function openEditTaskModal(task) {
   openTaskModal($("#taskModal"), task);
 }
 
+export function openEditEventModal(event) {
+  openEventModal($("#eventModal"), event);
+}
+
 export function openPartialModal(block) {
   const modal = $("#partialModal");
   const form = $("#partialForm");
@@ -138,10 +150,11 @@ function openTaskModal(modal, task = null) {
   form.minBlock.value = task?.minBlock ?? "";
   form.maxBlock.value = task?.maxBlock ?? "";
   form.startHint.value = task?.startHint || "";
+  syncDependencyOptions(task?.id || "");
   modal.showModal();
 }
 
-function openEventModal(modal) {
+function openEventModal(modal, event = null) {
   const form = $("#eventForm");
   const start = new Date();
   start.setHours(start.getHours() + 1, 0, 0, 0);
@@ -150,8 +163,13 @@ function openEventModal(modal) {
 
   clearFormError(form);
   form.reset();
-  form.start.value = toDateInputValue(start);
-  form.end.value = toDateInputValue(end);
+  $("#eventModalTitle").textContent = event ? "编辑日程" : "新建日程";
+  $("#eventSubmitLabel").textContent = event ? "保存修改并重排" : "保存并重排";
+  form.eventId.value = event?.id || "";
+  form.title.value = event?.title || "";
+  form.start.value = toDateInputValue(event ? new Date(event.start) : start);
+  form.end.value = toDateInputValue(event ? new Date(event.end) : end);
+  form.repeating.checked = Boolean(event?.repeating);
   modal.showModal();
 }
 
@@ -175,4 +193,11 @@ function clearFormError(form) {
   if (!error) return;
   error.textContent = "";
   error.hidden = true;
+}
+
+function syncDependencyOptions(editingTaskId) {
+  const select = $("#dependsSelect");
+  [...select.options].forEach((option) => {
+    option.disabled = Boolean(editingTaskId) && option.value === editingTaskId;
+  });
 }

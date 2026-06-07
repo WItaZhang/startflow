@@ -51,6 +51,12 @@ export function createStore() {
         events: [...current.events, { ...event, id: createId("event") }]
       }));
     },
+    updateEvent(eventId, patch) {
+      update((current) => ({
+        ...current,
+        events: current.events.map((event) => (event.id === eventId ? { ...event, ...patch } : event))
+      }));
+    },
     updateSettings(settings) {
       update((current) => ({ ...current, settings: { ...current.settings, ...settings } }));
     },

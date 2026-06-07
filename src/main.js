@@ -2,7 +2,7 @@ import { createStore } from "./data/store.js";
 import { buildPlan } from "./domain/scheduler.js";
 import { addDays, startOfDay } from "./domain/time.js";
 import { $, showToast } from "./ui/dom.js";
-import { bindForms, openEditTaskModal, openPartialModal } from "./ui/forms.js";
+import { bindForms, openEditEventModal, openEditTaskModal, openPartialModal } from "./ui/forms.js";
 import { bindNavigation } from "./ui/navigation.js";
 import { renderApp } from "./ui/render.js";
 
@@ -40,6 +40,10 @@ const actions = {
     }
   },
   onEventAction(action, eventId) {
+    if (action === "edit") {
+      const event = store.getState().events.find((item) => item.id === eventId);
+      if (event) openEditEventModal(event);
+    }
     if (action === "delete") {
       store.deleteEvent(eventId);
       showToast("日程已删除，并重新排程。");
