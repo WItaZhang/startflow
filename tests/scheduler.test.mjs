@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildPlan } from "../src/domain/scheduler.js";
-import { validateEventImpact, validateSettingsImpact, validateTaskFits } from "../src/domain/taskValidation.js";
+import { validateEventImpact, validateSettingsImpact, validateTaskFits, wouldCreateDependencyCycle } from "../src/domain/taskValidation.js";
 
 test("scheduler avoids fixed events", () => {
   const state = {
@@ -150,6 +150,60 @@ test("scheduler respects dependencies", () => {
   assert.ok(first);
   assert.ok(second);
   assert.ok(second.start >= first.end);
+});
+
+test("task validation rejects circular dependencies", () => {
+  const state = {
+    settings: {
+      wake: "08:00",
+      sleep: "22:00",
+      minBlock: 30,
+      maxBlock: 60,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
+    },
+    tasks: [
+      {
+        id: "task-a",
+        title: "Task A",
+        duration: 30,
+        doneMinutes: 0,
+        deadline: "2026-06-07T20:00:00.000Z",
+        mode: "auto",
+        dependsOn: "task-b",
+        history: []
+      },
+      {
+        id: "task-b",
+        title: "Task B",
+        duration: 30,
+        doneMinutes: 0,
+        deadline: "2026-06-07T21:00:00.000Z",
+        mode: "auto",
+        dependsOn: "",
+        history: []
+      }
+    ],
+    events: []
+  };
+
+  const result = validateTaskFits(
+    state,
+    "task-b",
+    {
+      title: "Task B",
+      duration: 30,
+      deadline: "2026-06-07T21:00:00.000Z",
+      mode: "auto",
+      dependsOn: "task-a",
+      startHint: ""
+    },
+    { now: "2026-06-06T08:00:00.000Z" }
+  );
+
+  assert.equal(wouldCreateDependencyCycle(state.tasks, "task-b", "task-a"), true);
+  assert.equal(result.ok, false);
+  assert.equal(result.risk.type, "dependency-cycle");
 });
 
 test("scheduler reports capacity risk", () => {

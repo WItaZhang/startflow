@@ -1,5 +1,5 @@
 import { addDays, atClock, formatDate, formatMonth, formatRange, formatTime, minutesBetween, startOfDay } from "../domain/time.js";
-import { formatTaskFitError } from "../domain/taskValidation.js";
+import { formatTaskFitError, wouldCreateDependencyCycle } from "../domain/taskValidation.js";
 import { $, escapeHtml } from "./dom.js";
 
 export function renderApp({ state, plan, selectedView, calendarDate, actions }) {
@@ -285,7 +285,7 @@ function renderTaskDependencyOptions(state) {
   const currentValue = select.value;
   const editingTaskId = $("#taskForm")?.taskId?.value || "";
   select.innerHTML = `<option value="">无</option>${state.tasks
-    .map((task) => `<option value="${escapeHtml(task.id)}" ${task.id === editingTaskId ? "disabled" : ""}>${escapeHtml(task.title)}</option>`)
+    .map((task) => `<option value="${escapeHtml(task.id)}" ${wouldCreateDependencyCycle(state.tasks, editingTaskId, task.id) ? "disabled" : ""}>${escapeHtml(task.title)}</option>`)
     .join("")}`;
   if ([...select.options].some((option) => option.value === currentValue && !option.disabled)) {
     select.value = currentValue;

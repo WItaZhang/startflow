@@ -18,6 +18,17 @@ export function validateTaskFits(state, taskId, payload, options = {}) {
     now,
     horizonDays: horizonDaysForTasks(candidateState.tasks, now)
   });
+  if (wouldCreateDependencyCycle(candidateState.tasks, targetId, candidateTask.dependsOn)) {
+    return {
+      ok: false,
+      risk: {
+        taskId: targetId,
+        type: "dependency-cycle",
+        message: "任务依赖关系不能形成循环。"
+      },
+      plan
+    };
+  }
   const risk = plan.risks.find((item) => item.taskId === targetId);
 
   return {
@@ -69,6 +80,9 @@ export function validateSettingsImpact(state, settings, options = {}) {
 
 export function formatTaskFitError(risk, settings = {}) {
   if (!risk) return "";
+  if (risk.type === "dependency-cycle") {
+    return "任务依赖关系不能形成循环。请换一个前置任务，或先取消相关任务的依赖。";
+  }
   if (risk.type === "dependency") {
     return "这个任务依赖的前置任务还无法先排完，请先调整前置任务、DDL 或取消依赖。";
   }
@@ -103,6 +117,23 @@ export function formatSettingsImpactError(risks, state, settings = {}) {
   const buffer = Number(settings.deadlineBufferHours || 0);
   const bufferText = buffer > 0 ? ` 系统还会预留 ${buffer} 小时 DDL 提前量。` : "";
   return `这组设置会让「${title}」排不下，还差 ${remaining} 分钟${extraText}。请放宽作息、缓冲或单次时长，或先调整任务。${bufferText}`;
+}
+
+export function wouldCreateDependencyCycle(tasks, taskId, dependsOn) {
+  if (!taskId || !dependsOn) return false;
+  if (taskId === dependsOn) return true;
+
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const seen = new Set([taskId]);
+  let cursor = dependsOn;
+
+  while (cursor) {
+    if (seen.has(cursor)) return true;
+    seen.add(cursor);
+    cursor = byId.get(cursor)?.dependsOn || "";
+  }
+
+  return false;
 }
 
 function riskGotWorse(previousRisk, nextRisk) {

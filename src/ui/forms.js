@@ -4,7 +4,8 @@ import {
   formatTaskFitError,
   validateEventImpact,
   validateSettingsImpact,
-  validateTaskFits
+  validateTaskFits,
+  wouldCreateDependencyCycle
 } from "../domain/taskValidation.js";
 import { $, closeDialog, showToast } from "./dom.js";
 
@@ -36,6 +37,10 @@ export function bindForms(store, getCurrentPlan) {
     if (!Number.isFinite(deadline.getTime())) return setFormError(form, "请填写有效的截止时间。");
     if (data.minBlock && data.maxBlock && Number(data.minBlock) > Number(data.maxBlock)) return setFormError(form, "最短单次不能大于最长单次。");
     if (data.taskId && data.dependsOn === data.taskId) return setFormError(form, "任务不能依赖自己。");
+
+    if (wouldCreateDependencyCycle(store.getState().tasks, data.taskId, data.dependsOn)) {
+      return setFormError(form, "任务依赖关系不能形成循环。");
+    }
 
     const payload = {
       title: data.title.trim(),
@@ -234,9 +239,14 @@ function setupDateTimeControls() {
     if (!minute.options.length) {
       minute.innerHTML = range(60).map((value) => `<option value="${pad(value)}">${pad(value)}</option>`).join("");
     }
-    control.querySelectorAll("input, select").forEach((input) => {
-      input.addEventListener("change", () => syncDateTimeControl(control));
-    });
+    enhanceDateTimeControl(control);
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-datetime-field]")) closeDateTimePopovers();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeDateTimePopovers();
   });
 }
 
@@ -248,6 +258,7 @@ function setDateTimeControl(form, fieldName, date) {
   control.querySelector("[data-hour]").value = pad(value.getHours());
   control.querySelector("[data-minute]").value = pad(value.getMinutes());
   syncDateTimeControl(control);
+  renderDateTimeControl(control);
 }
 
 function syncDateTimeControls(form) {
@@ -261,6 +272,176 @@ function syncDateTimeControl(control) {
   const hour = control.querySelector("[data-hour]").value;
   const minute = control.querySelector("[data-minute]").value;
   form.elements[fieldName].value = date && hour && minute ? `${date}T${hour}:${minute}` : "";
+  updateDateTimeLabel(control);
+}
+
+function enhanceDateTimeControl(control) {
+  if (control.dataset.enhanced) return;
+  control.dataset.enhanced = "true";
+  const dateInput = control.querySelector("[data-date]");
+  dateInput.type = "hidden";
+  control.querySelector(".time-wheel")?.setAttribute("hidden", "");
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "datetime-trigger";
+  trigger.dataset.datetimeTrigger = "true";
+  trigger.innerHTML = `<span data-datetime-label></span><span class="material-symbols-outlined">calendar_month</span>`;
+
+  const popover = document.createElement("div");
+  popover.className = "datetime-popover";
+  popover.hidden = true;
+  popover.innerHTML = `
+    <div class="datetime-calendar">
+      <div class="datetime-calendar-head">
+        <button type="button" class="icon-button small" data-month-prev aria-label="上一月"><span class="material-symbols-outlined">chevron_left</span></button>
+        <strong data-month-label></strong>
+        <button type="button" class="icon-button small" data-month-next aria-label="下一月"><span class="material-symbols-outlined">chevron_right</span></button>
+      </div>
+      <div class="datetime-weekdays">${["日", "一", "二", "三", "四", "五", "六"].map((day) => `<span>${day}</span>`).join("")}</div>
+      <div class="datetime-days" data-calendar-days></div>
+    </div>
+    <div class="datetime-time-panel">
+      <div class="datetime-wheel-list" data-hour-wheel aria-label="小时"></div>
+      <span class="datetime-colon">:</span>
+      <div class="datetime-wheel-list" data-minute-wheel aria-label="分钟"></div>
+    </div>`;
+
+  control.prepend(popover);
+  control.prepend(trigger);
+
+  trigger.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const willOpen = popover.hidden;
+    closeDateTimePopovers();
+    popover.hidden = !willOpen;
+    if (willOpen) {
+      control.dataset.pickerMonth = monthKey(selectedDate(control));
+      renderDateTimeControl(control);
+      requestAnimationFrame(() => scrollSelectedWheelItems(control));
+    }
+  });
+
+  popover.querySelector("[data-month-prev]").addEventListener("click", () => shiftPickerMonth(control, -1));
+  popover.querySelector("[data-month-next]").addEventListener("click", () => shiftPickerMonth(control, 1));
+
+  renderDateTimeControl(control);
+}
+
+function renderDateTimeControl(control) {
+  updateDateTimeLabel(control);
+  renderCalendar(control);
+  renderTimeWheels(control);
+}
+
+function renderCalendar(control) {
+  const date = selectedDate(control);
+  const monthDate = control.dataset.pickerMonth ? monthFromKey(control.dataset.pickerMonth) : new Date(date.getFullYear(), date.getMonth(), 1);
+  const firstOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const gridStart = new Date(firstOfMonth);
+  gridStart.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
+  const selectedKey = datePart(date);
+  const todayKey = datePart(new Date());
+  const days = control.querySelector("[data-calendar-days]");
+  const label = control.querySelector("[data-month-label]");
+  if (!days || !label) return;
+
+  label.textContent = `${firstOfMonth.getFullYear()}年 ${firstOfMonth.getMonth() + 1}月`;
+  days.innerHTML = range(42)
+    .map((index) => {
+      const day = new Date(gridStart);
+      day.setDate(gridStart.getDate() + index);
+      const key = datePart(day);
+      const classes = [
+        day.getMonth() === firstOfMonth.getMonth() ? "" : "muted",
+        key === selectedKey ? "selected" : "",
+        key === todayKey ? "today" : ""
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return `<button type="button" class="${classes}" data-date-choice="${key}">${day.getDate()}</button>`;
+    })
+    .join("");
+
+  days.querySelectorAll("[data-date-choice]").forEach((button) => {
+    button.addEventListener("click", () => {
+      control.querySelector("[data-date]").value = button.dataset.dateChoice;
+      syncDateTimeControl(control);
+      renderDateTimeControl(control);
+    });
+  });
+}
+
+function renderTimeWheels(control) {
+  renderWheel(control, "[data-hour-wheel]", 24, control.querySelector("[data-hour]").value, (value) => {
+    control.querySelector("[data-hour]").value = value;
+  });
+  renderWheel(control, "[data-minute-wheel]", 60, control.querySelector("[data-minute]").value, (value) => {
+    control.querySelector("[data-minute]").value = value;
+  });
+}
+
+function renderWheel(control, selector, length, currentValue, selectValue) {
+  const wheel = control.querySelector(selector);
+  if (!wheel) return;
+  wheel.innerHTML = range(length)
+    .map((value) => {
+      const text = pad(value);
+      return `<button type="button" class="${text === currentValue ? "selected" : ""}" data-wheel-value="${text}">${text}</button>`;
+    })
+    .join("");
+  wheel.querySelectorAll("[data-wheel-value]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectValue(button.dataset.wheelValue);
+      syncDateTimeControl(control);
+      renderTimeWheels(control);
+      requestAnimationFrame(() => scrollSelectedWheelItems(control));
+    });
+  });
+}
+
+function scrollSelectedWheelItems(control) {
+  control.querySelectorAll(".datetime-wheel-list").forEach((wheel) => {
+    const selected = wheel.querySelector(".selected");
+    selected?.scrollIntoView({ block: "center" });
+  });
+}
+
+function updateDateTimeLabel(control) {
+  const label = control.querySelector("[data-datetime-label]");
+  if (!label) return;
+  const date = control.querySelector("[data-date]").value;
+  const hour = control.querySelector("[data-hour]").value;
+  const minute = control.querySelector("[data-minute]").value;
+  label.textContent = date && hour && minute ? `${date.replaceAll("-", "/")} ${hour}:${minute}` : "选择时间";
+}
+
+function shiftPickerMonth(control, offset) {
+  const base = control.dataset.pickerMonth ? monthFromKey(control.dataset.pickerMonth) : selectedDate(control);
+  const next = new Date(base.getFullYear(), base.getMonth() + offset, 1);
+  control.dataset.pickerMonth = monthKey(next);
+  renderCalendar(control);
+}
+
+function selectedDate(control) {
+  const date = control.querySelector("[data-date]").value || datePart(new Date());
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, month - 1, day || 1);
+}
+
+function monthKey(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}`;
+}
+
+function monthFromKey(key) {
+  const [year, month] = key.split("-").map(Number);
+  return new Date(year, month - 1, 1);
+}
+
+function closeDateTimePopovers() {
+  document.querySelectorAll(".datetime-popover").forEach((popover) => {
+    popover.hidden = true;
+  });
 }
 
 function datePart(date) {
