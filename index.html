@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StartFlow</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>StartFlow</h1>
+        <p>保持专注</p>
+      </div>
+      <nav class="nav" aria-label="主导航">
+        <button class="nav-item active" data-view="today">
+          <span class="material-symbols-outlined">today</span>
+          <span>今日</span>
+        </button>
+        <button class="nav-item" data-view="tasks">
+          <span class="material-symbols-outlined">inventory_2</span>
+          <span>任务库</span>
+        </button>
+        <button class="nav-item" data-view="calendar">
+          <span class="material-symbols-outlined">calendar_month</span>
+          <span>日历</span>
+        </button>
+        <button class="nav-item" data-view="settings">
+          <span class="material-symbols-outlined">settings</span>
+          <span>设置</span>
+        </button>
+      </nav>
+      <div class="profile">
+        <div class="avatar">凡</div>
+        <div>
+          <strong>张小凡</strong>
+          <span>轻量规划中</span>
+        </div>
+      </div>
+    </aside>
+
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="viewEyebrow">今日概览</p>
+          <h2 id="viewTitle">把今天变成能开始的几个时间块</h2>
+        </div>
+        <div class="top-actions">
+          <div class="segmented" role="tablist" aria-label="视图切换">
+            <button class="active" data-view-shortcut="today">今日</button>
+            <button data-view-shortcut="calendar">月视图</button>
+          </div>
+          <button class="button secondary" id="seedButton">
+            <span class="material-symbols-outlined">auto_awesome</span>
+            示例数据
+          </button>
+          <button class="button primary" id="openTaskModal">
+            <span class="material-symbols-outlined">add</span>
+            新建任务
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section class="view active" id="todayView">
+          <div class="stats-grid">
+            <article class="stat-card">
+              <div class="stat-icon calm"><span class="material-symbols-outlined">checklist</span></div>
+              <div>
+                <p>待办总计</p>
+                <strong id="taskCount">0 个</strong>
+              </div>
+            </article>
+            <article class="stat-card warning">
+              <div class="stat-icon warm"><span class="material-symbols-outlined">priority_high</span></div>
+              <div>
+                <p>高负荷预警</p>
+                <strong id="loadRange">暂无</strong>
+              </div>
+            </article>
+            <article class="stat-card danger">
+              <div class="stat-icon red"><span class="material-symbols-outlined">event_busy</span></div>
+              <div>
+                <p>存在风险</p>
+                <strong id="riskCount">0 个</strong>
+              </div>
+            </article>
+          </div>
+
+          <div class="today-layout">
+            <section class="panel timeline-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">今日排期</p>
+                  <h3 id="todayDateLabel">今天</h3>
+                </div>
+                <button class="button secondary" id="rescheduleButton">
+                  <span class="material-symbols-outlined">refresh</span>
+                  自动重排
+                </button>
+              </div>
+              <div class="focus-note" id="focusNote">
+                <span class="material-symbols-outlined">bolt</span>
+                <span>先做 10 分钟也算开始。系统会替你处理冲突和重排。</span>
+              </div>
+              <div class="timeline" id="timeline"></div>
+            </section>
+
+            <aside class="panel side-panel">
+              <div class="panel-head compact">
+                <div>
+                  <p class="eyebrow">启动队列</p>
+                  <h3>接下来</h3>
+                </div>
+              </div>
+              <div id="nextList" class="stack-list"></div>
+              <div class="mini-visual" aria-hidden="true">
+                <div class="desk">
+                  <div class="paper"></div>
+                  <div class="cup"></div>
+                  <div class="pen"></div>
+                </div>
+                <div>
+                  <strong>低门槛启动</strong>
+                  <p>任务块里保留“没能做到”和“做了一部分”，计划会跟着真实情况走。</p>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="tasksView">
+          <div class="split-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">任务库</p>
+                  <h3>所有任务</h3>
+                </div>
+                <button class="button primary" id="openTaskModal2">
+                  <span class="material-symbols-outlined">add</span>
+                  新建任务
+                </button>
+              </div>
+              <div id="taskLibrary" class="task-library"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">固定安排</p>
+                  <h3>课程、聚餐和其他不可用时间</h3>
+                </div>
+                <button class="button secondary" id="openEventModal">
+                  <span class="material-symbols-outlined">event</span>
+                  新建日程
+                </button>
+              </div>
+              <div id="eventLibrary" class="stack-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="calendarView">
+          <div class="calendar-toolbar">
+            <div>
+              <p class="eyebrow">月视图</p>
+              <h3 id="monthTitle">本月</h3>
+            </div>
+            <div class="month-controls">
+              <button class="icon-button" id="prevMonth" aria-label="上个月"><span class="material-symbols-outlined">chevron_left</span></button>
+              <button class="button secondary" id="todayMonth">今天</button>
+              <button class="icon-button" id="nextMonth" aria-label="下个月"><span class="material-symbols-outlined">chevron_right</span></button>
+            </div>
+          </div>
+          <div class="calendar-card">
+            <div class="weekday-row">
+              <span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+          </div>
+        </section>
+
+        <section class="view" id="settingsView">
+          <div class="split-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">设置</p>
+                  <h3>睡眠和排程偏好</h3>
+                </div>
+              </div>
+              <form id="settingsForm" class="form-grid">
+                <label>
+                  起床时间
+                  <input type="time" name="wake" />
+                </label>
+                <label>
+                  睡觉时间
+                  <input type="time" name="sleep" />
+                </label>
+                <label>
+                  默认最短单次
+                  <input type="number" name="minBlock" min="10" step="5" />
+                </label>
+                <label>
+                  默认最长单次
+                  <input type="number" name="maxBlock" min="15" step="5" />
+                </label>
+                <label>
+                  每天保留缓冲
+                  <input type="number" name="dailyBuffer" min="0" step="10" />
+                </label>
+                <label>
+                  计划提前量
+                  <input type="number" name="deadlineBuffer" min="0" step="1" />
+                </label>
+                <button class="button primary form-span" type="submit">保存设置并重排</button>
+              </form>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">排程说明</p>
+                  <h3>系统如何决定时间块</h3>
+                </div>
+              </div>
+              <div class="rules-list">
+                <p><strong>避开不可用时间：</strong>睡眠、课程、聚餐和手动添加的日程都会被视为不可用。</p>
+                <p><strong>尊重依赖：</strong>被依赖的任务必须先完成对应时长，后续任务才会进入排程。</p>
+                <p><strong>自动拆时间：</strong>不做语义拆分，只按剩余总时长切成可开始的时间块。</p>
+                <p><strong>失败也进入系统：</strong>点“没能做到”会把这段时间放回剩余量并自动重排。</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <button class="fab" id="fab" aria-label="快速新建任务"><span class="material-symbols-outlined">add</span></button>
+
+    <dialog class="modal" id="taskModal">
+      <form method="dialog" class="modal-card" id="taskForm">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">任务</p>
+            <h3>新建任务</h3>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="关闭"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="form-grid">
+          <label class="form-span">
+            任务名
+            <input name="title" required placeholder="例如：统计作业" />
+          </label>
+          <label>
+            预计总时长（分钟）
+            <input name="duration" type="number" min="10" step="5" required value="90" />
+          </label>
+          <label>
+            截止时间
+            <input name="deadline" type="datetime-local" required />
+          </label>
+          <label>
+            完成方式
+            <select name="mode">
+              <option value="auto">系统帮我安排</option>
+              <option value="single">尽量一次做完</option>
+              <option value="split">不要一次做完</option>
+            </select>
+          </label>
+          <label>
+            依赖任务
+            <select name="dependsOn" id="dependsSelect">
+              <option value="">无</option>
+            </select>
+          </label>
+          <label>
+            最短单次（分钟）
+            <input name="minBlock" type="number" min="10" step="5" placeholder="默认 25" />
+          </label>
+          <label>
+            最长单次（分钟）
+            <input name="maxBlock" type="number" min="15" step="5" placeholder="默认 90" />
+          </label>
+          <label class="form-span">
+            可选开始提示
+            <input name="startHint" placeholder="例如：打开文档，先做 10 分钟" />
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="button secondary" value="cancel" type="button" data-close-modal>取消</button>
+          <button class="button primary" value="default" type="submit">保存并排程</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="eventModal">
+      <form method="dialog" class="modal-card" id="eventForm">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">不可用时间</p>
+            <h3>新建日程</h3>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="关闭"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="form-grid">
+          <label class="form-span">
+            日程名
+            <input name="title" required placeholder="例如：线代课 / 聚餐" />
+          </label>
+          <label>
+            开始
+            <input name="start" type="datetime-local" required />
+          </label>
+          <label>
+            结束
+            <input name="end" type="datetime-local" required />
+          </label>
+          <label class="check-row form-span">
+            <input name="repeating" type="checkbox" />
+            每周重复
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="button secondary" value="cancel" type="button" data-close-modal>取消</button>
+          <button class="button primary" value="default" type="submit">保存并重排</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="partialModal">
+      <form method="dialog" class="modal-card small" id="partialForm">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">执行反馈</p>
+            <h3>做了一部分</h3>
+          </div>
+        </div>
+        <label>
+          实际完成了多少分钟
+          <input name="minutes" type="number" min="5" step="5" value="15" />
+        </label>
+        <input type="hidden" name="blockId" />
+        <div class="modal-actions">
+          <button class="button secondary" value="cancel" type="button" data-close-modal>取消</button>
+          <button class="button primary" value="default" type="submit">确认并重排</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
