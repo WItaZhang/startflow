@@ -200,10 +200,10 @@ function renderTaskCard(task, state) {
   const done = Math.min(task.duration, task.doneMinutes || 0);
   const percent = task.duration ? Math.round((done / task.duration) * 100) : 0;
   const dependency = task.dependsOn ? state.tasks.find((item) => item.id === task.dependsOn)?.title : "";
-  const statusClass = percent >= 100 ? "done" : task.missedCount ? "risk" : "";
+  const statusClass = percent >= 100 ? "done" : task.missedCount ? "risk" : "active";
   const statusText = percent >= 100 ? "已完成" : task.missedCount ? `没能做到 ${task.missedCount} 次` : "进行中";
 
-  return `<article class="task-card">
+  return `<article class="task-card ${statusClass}">
     <div class="card-head">
       <div>
         <strong>${escapeHtml(task.title)}</strong>
