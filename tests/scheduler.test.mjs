@@ -215,6 +215,42 @@ test("scheduler does not create sub-minimum trailing blocks", () => {
   assert.equal(taskBlocks.reduce((sum, block) => sum + block.minutes, 0), 175);
 });
 
+test("scheduler supports sleep times after midnight", () => {
+  const state = {
+    settings: {
+      wake: "09:00",
+      sleep: "01:00",
+      minBlock: 60,
+      maxBlock: 60,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
+    },
+    tasks: [
+      {
+        id: "night-task",
+        title: "Night study",
+        duration: 60,
+        doneMinutes: 0,
+        deadline: "2026-06-08T00:30:00",
+        mode: "auto",
+        dependsOn: "",
+        history: []
+      }
+    ],
+    events: []
+  };
+
+  const plan = buildPlan(state, { now: "2026-06-07T22:00:00", horizonDays: 2 });
+  const taskBlocks = plan.blocks.filter((block) => block.taskId === "night-task");
+  const sleepBlocks = plan.blocks.filter((block) => block.type === "sleep");
+
+  assert.equal(plan.risks.length, 0);
+  assert.equal(taskBlocks.length, 1);
+  assert.equal(taskBlocks[0].start.getHours(), 22);
+  assert.equal(taskBlocks[0].minutes, 60);
+  assert.ok(sleepBlocks.some((block) => block.start.getHours() === 1 && block.end.getHours() === 9));
+});
+
 test("task validation rejects a task that cannot fit", () => {
   const state = {
     settings: {

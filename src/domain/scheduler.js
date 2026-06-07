@@ -171,9 +171,7 @@ function findNextFreeSlot({ busy, startAfter, latestEnd, minMinutes, settings })
   const lastDay = startOfDay(latestEnd);
 
   for (let day = cursorDay; day <= lastDay; day = addDays(day, 1)) {
-    const dayStart = new Date(Math.max(atClock(day, settings.wake).getTime(), startAfter.getTime()));
-    const dayEndRaw = atClock(day, settings.sleep);
-    const dayEnd = new Date(Math.min(addMinutes(dayEndRaw, -settings.dailyBuffer).getTime(), latestEnd.getTime()));
+    const { dayStart, dayEnd } = availabilityWindow(day, settings, startAfter, latestEnd);
     if (dayEnd <= dayStart) continue;
 
     const blocked = busy
@@ -215,11 +213,28 @@ function dependencyReadyAt(task, taskEndTimes, tasks) {
   return taskEndTimes.get(task.dependsOn) || null;
 }
 
+function availabilityWindow(day, settings, startAfter, latestEnd) {
+  const wake = atClock(day, settings.wake);
+  let sleep = atClock(day, settings.sleep);
+  if (sleep <= wake) {
+    sleep = addDays(sleep, 1);
+  }
+
+  return {
+    dayStart: new Date(Math.max(wake.getTime(), startAfter.getTime())),
+    dayEnd: new Date(Math.min(addMinutes(sleep, -settings.dailyBuffer).getTime(), latestEnd.getTime()))
+  };
+}
+
 function buildSleepBlocks(settings, now, horizonDays) {
   const blocks = [];
   for (let offset = 0; offset < horizonDays; offset += 1) {
     const day = addDays(startOfDay(now), offset);
-    const sleepStart = atClock(day, settings.sleep);
+    const wake = atClock(day, settings.wake);
+    let sleepStart = atClock(day, settings.sleep);
+    if (sleepStart <= wake) {
+      sleepStart = addDays(sleepStart, 1);
+    }
     const wakeNext = atClock(addDays(day, 1), settings.wake);
     blocks.push({
       id: `sleep-${offset}`,
