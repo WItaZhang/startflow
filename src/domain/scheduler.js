@@ -41,7 +41,6 @@ export function buildPlan(state, options = {}) {
     });
 
     blocks.push(...result.blocks);
-    busy.push(...result.blocks.map(taskBlockToBusyBlock));
     if (result.remaining > 0) {
       risks.push({
         taskId: task.id,

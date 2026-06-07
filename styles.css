@@ -444,25 +444,54 @@ main {
 
 .timeline {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 8px;
+  padding-right: 10px;
+  scrollbar-gutter: stable;
 }
 
-.time-row {
+.timeline-canvas {
+  position: relative;
+  min-height: 100%;
+}
+
+.timeline-marker {
+  position: absolute;
+  left: 0;
+  right: 0;
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
   gap: 14px;
-  align-items: start;
-  flex: 0 0 auto;
+  align-items: center;
+  pointer-events: none;
+}
+
+.timeline-marker span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  text-align: right;
+}
+
+.timeline-marker i {
+  display: block;
+  height: 1px;
+  background: rgba(121, 134, 146, 0.18);
+}
+
+.time-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
 }
 
 .time-label {
-  padding-top: 12px;
+  padding-top: 14px;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.4;
@@ -474,8 +503,9 @@ main {
   border: 1px solid var(--outline);
   border-left-width: 4px;
   border-radius: 8px;
-  padding: 14px;
+  padding: 12px 14px;
   background: var(--white);
+  box-shadow: 0 8px 20px rgba(25, 28, 30, 0.04);
 }
 
 .schedule-block.task {
@@ -506,16 +536,26 @@ main {
   gap: 12px;
 }
 
+.block-top > div {
+  min-width: 0;
+}
+
 .block-title {
   margin: 0;
+  overflow: hidden;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .block-meta,
 .hint {
   margin: 4px 0 0;
+  overflow: hidden;
   color: var(--muted);
   font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hint {

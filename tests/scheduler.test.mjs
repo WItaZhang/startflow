@@ -42,6 +42,73 @@ test("scheduler avoids fixed events", () => {
   assert.ok(task.end <= new Date("2026-06-06T08:30:00.000Z") || task.start >= new Date("2026-06-06T10:30:00.000Z"));
 });
 
+test("scheduler never overlaps task blocks with busy blocks", () => {
+  const state = {
+    settings: {
+      wake: "07:30",
+      sleep: "23:30",
+      minBlock: 30,
+      maxBlock: 60,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
+    },
+    tasks: [
+      {
+        id: "paper",
+        title: "Paper reading",
+        duration: 150,
+        doneMinutes: 0,
+        deadline: "2026-06-07T18:00:00.000Z",
+        mode: "auto",
+        dependsOn: "",
+        history: []
+      },
+      {
+        id: "stats",
+        title: "Stats homework",
+        duration: 120,
+        doneMinutes: 0,
+        deadline: "2026-06-07T20:00:00.000Z",
+        mode: "auto",
+        dependsOn: "",
+        history: []
+      }
+    ],
+    events: [
+      {
+        id: "class",
+        title: "Class",
+        start: "2026-06-07T08:00:00.000Z",
+        end: "2026-06-07T09:30:00.000Z",
+        repeating: false
+      },
+      {
+        id: "lunch",
+        title: "Lunch",
+        start: "2026-06-07T12:00:00.000Z",
+        end: "2026-06-07T13:00:00.000Z",
+        repeating: false
+      }
+    ]
+  };
+
+  const plan = buildPlan(state, { now: "2026-06-07T07:30:00.000Z", horizonDays: 1 });
+  const taskBlocks = plan.blocks.filter((block) => block.type === "task");
+  const busyBlocks = plan.blocks.filter((block) => block.type !== "task");
+
+  for (const taskBlock of taskBlocks) {
+    for (const busyBlock of busyBlocks) {
+      assert.equal(overlaps(taskBlock, busyBlock), false, `${taskBlock.title} overlaps ${busyBlock.title}`);
+    }
+  }
+
+  for (let index = 0; index < taskBlocks.length; index += 1) {
+    for (let other = index + 1; other < taskBlocks.length; other += 1) {
+      assert.equal(overlaps(taskBlocks[index], taskBlocks[other]), false, "task blocks overlap each other");
+    }
+  }
+});
+
 test("scheduler respects dependencies", () => {
   const state = {
     settings: {
@@ -286,3 +353,7 @@ test("task validation only blocks the task being saved", () => {
 
   assert.equal(result.ok, true);
 });
+
+function overlaps(left, right) {
+  return left.start < right.end && right.start < left.end;
+}

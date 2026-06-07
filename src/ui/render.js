@@ -1,4 +1,4 @@
-import { addDays, formatDate, formatMonth, formatRange, formatTime, minutesBetween, startOfDay } from "../domain/time.js";
+import { addDays, atClock, formatDate, formatMonth, formatRange, formatTime, minutesBetween, startOfDay } from "../domain/time.js";
 import { formatTaskFitError } from "../domain/taskValidation.js";
 import { $, escapeHtml } from "./dom.js";
 
@@ -41,7 +41,11 @@ function renderTimeline(plan, actions) {
     return;
   }
 
-  timeline.innerHTML = blocks.map(renderTimelineBlock).join("");
+  const layout = buildTimelineLayout(blocks, plan.settings, today, tomorrow);
+  timeline.innerHTML = `<div class="timeline-canvas" style="height: ${layout.height}px">
+    ${layout.markers.map(renderTimelineMarker).join("")}
+    ${layout.items.map(renderTimelineBlock).join("")}
+  </div>`;
   timeline.querySelectorAll("[data-action]").forEach((button) => {
     button.addEventListener("click", () => {
       const block = blocks.find((item) => item.id === button.dataset.blockId);
@@ -51,7 +55,15 @@ function renderTimeline(plan, actions) {
   });
 }
 
-function renderTimelineBlock(block) {
+function renderTimelineMarker(marker) {
+  return `<div class="timeline-marker" style="top: ${marker.top}px">
+    <span>${marker.label}</span>
+    <i></i>
+  </div>`;
+}
+
+function renderTimelineBlock(item) {
+  const { block } = item;
   const isTask = block.type === "task";
   const className = `schedule-block ${escapeHtml(block.type)}${isTask && block.missedCount ? " missed" : ""}`;
   const icon = block.type === "event" ? "event" : block.type === "sleep" ? "bedtime" : "bolt";
@@ -64,7 +76,7 @@ function renderTimelineBlock(block) {
       </div>`
     : "";
 
-  return `<div class="time-row">
+  return `<div class="time-row" style="top: ${item.top}px; min-height: ${item.height}px">
     <div class="time-label">${formatTime(block.start)}</div>
     <article class="${className}">
       <div class="block-top">
@@ -78,6 +90,76 @@ function renderTimelineBlock(block) {
       ${actions}
     </article>
   </div>`;
+}
+
+export function buildTimelineLayout(blocks, settings, today, tomorrow) {
+  const pixelsPerMinute = 2.2;
+  const rowGap = 12;
+  const dayStart = startOfDay(today);
+  const fallbackStart = atClock(dayStart, settings?.wake || "07:30");
+  let fallbackEnd = atClock(dayStart, settings?.sleep || "23:30");
+  if (fallbackEnd <= fallbackStart) fallbackEnd = tomorrow;
+
+  const starts = [fallbackStart, ...blocks.map((block) => new Date(Math.max(block.start.getTime(), today.getTime())))];
+  const ends = [fallbackEnd, ...blocks.map((block) => new Date(Math.min(block.end.getTime(), tomorrow.getTime())))];
+  const windowStart = floorToHour(new Date(Math.min(...starts.map((date) => date.getTime()))));
+  const windowEnd = ceilToHour(new Date(Math.max(...ends.map((date) => date.getTime()))));
+
+  let cursor = 0;
+  const items = blocks
+    .slice()
+    .sort((a, b) => a.start - b.start || blockPriority(a) - blockPriority(b))
+    .map((block) => {
+      const clippedStart = new Date(Math.max(block.start.getTime(), windowStart.getTime(), today.getTime()));
+      const clippedEnd = new Date(Math.min(block.end.getTime(), windowEnd.getTime(), tomorrow.getTime()));
+      const rawTop = minutesBetween(windowStart, clippedStart) * pixelsPerMinute;
+      const durationHeight = Math.max(1, minutesBetween(clippedStart, clippedEnd) * pixelsPerMinute);
+      const height = Math.max(minTimelineBlockHeight(block), durationHeight);
+      const top = Math.max(rawTop, cursor);
+      cursor = top + height + rowGap;
+      return { block, top: Math.round(top), height: Math.round(height) };
+    });
+
+  const markers = [];
+  for (let marker = floorToHour(windowStart); marker <= windowEnd; marker = new Date(marker.getTime() + 60 * 60 * 1000)) {
+    markers.push({
+      top: Math.round(minutesBetween(windowStart, marker) * pixelsPerMinute),
+      label: formatTime(marker)
+    });
+  }
+
+  const timeHeight = minutesBetween(windowStart, windowEnd) * pixelsPerMinute;
+  const contentHeight = items.reduce((max, item) => Math.max(max, item.top + item.height), 0);
+  return {
+    height: Math.max(280, Math.ceil(Math.max(timeHeight, contentHeight) + 12)),
+    items,
+    markers
+  };
+}
+
+function minTimelineBlockHeight(block) {
+  if (block.type === "task") return 132;
+  if (block.type === "event") return 76;
+  return 56;
+}
+
+function blockPriority(block) {
+  return { event: 0, task: 1, sleep: 2 }[block.type] ?? 3;
+}
+
+function floorToHour(date) {
+  const value = new Date(date);
+  value.setMinutes(0, 0, 0);
+  return value;
+}
+
+function ceilToHour(date) {
+  const value = new Date(date);
+  value.setSeconds(0, 0);
+  if (value.getMinutes() > 0) {
+    value.setHours(value.getHours() + 1, 0, 0, 0);
+  }
+  return value;
 }
 
 function renderNextList(plan) {
