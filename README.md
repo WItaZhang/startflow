@@ -58,6 +58,8 @@ supabase/schema.sql
 
 RLS 已开启，所有表都只允许登录用户读写自己的 `user_id`。
 
+如果你之前运行过早期版本的 `public.user_states` JSON 表，应用会在首次加载时自动读取旧 state，并迁移写入新的规范化表。
+
 ## Vercel 部署
 
 Vercel 推荐设置：

@@ -234,6 +234,12 @@ export function createSupabaseRepository(client, userId) {
         Boolean(historyResult.data?.length);
 
       if (!hasRemoteData) {
+        const legacyState = await loadLegacyUserState(client, userId);
+        if (legacyState) {
+          await this.saveState(legacyState);
+          return legacyState;
+        }
+
         const initial = cache.loadCachedState() || sampleState();
         await this.saveState(initial);
         return initial;
@@ -254,6 +260,25 @@ export function createSupabaseRepository(client, userId) {
       await saveNormalizedState(client, userId, nextState);
     }
   };
+}
+
+async function loadLegacyUserState(client, userId) {
+  const result = await client
+    .from("user_states")
+    .select("state")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (result.error) {
+    if (isMissingRelationError(result.error)) return null;
+    throw result.error;
+  }
+
+  return result.data?.state ? migrateState(result.data.state) : null;
+}
+
+function isMissingRelationError(error) {
+  return error.code === "42P01" || error.code === "PGRST205" || /does not exist|schema cache/i.test(error.message || "");
 }
 
 async function saveNormalizedState(client, userId, state) {

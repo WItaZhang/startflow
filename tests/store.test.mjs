@@ -183,6 +183,57 @@ test("supabase repository loads normalized rows into app state", async () => {
   assert.equal(state.events[0].title, "Lunch");
 });
 
+test("supabase repository migrates legacy user_states into normalized tables", async () => {
+  installMemoryStorage();
+  const legacyState = {
+    version: 1,
+    settings: {
+      wake: "06:30",
+      sleep: "22:00",
+      minBlock: 20,
+      maxBlock: 70,
+      dailyBuffer: 15,
+      deadlineBufferHours: 1
+    },
+    tasks: [
+      {
+        id: "legacy-task",
+        title: "Legacy task",
+        duration: 75,
+        doneMinutes: 15,
+        deadline: "2026-06-10T18:00:00.000Z",
+        mode: "auto",
+        dependsOn: "",
+        startHint: "Open legacy notes",
+        missedCount: 0,
+        history: [{ id: "legacy-history", label: "做了一部分：15 分钟", minutes: 15, at: "2026-06-07T12:00:00.000Z" }]
+      }
+    ],
+    events: [
+      {
+        id: "legacy-event",
+        title: "Legacy event",
+        start: "2026-06-09T10:00:00.000Z",
+        end: "2026-06-09T11:00:00.000Z",
+        repeating: false
+      }
+    ]
+  };
+  const db = createFakeSupabase({
+    user_states: [{ user_id: "user-1", state: legacyState }]
+  });
+
+  const loaded = await createSupabaseRepository(db.client, "user-1").loadState();
+
+  assert.equal(loaded.settings.wake, "06:30");
+  assert.equal(loaded.tasks[0].title, "Legacy task");
+  assert.equal(loaded.events[0].title, "Legacy event");
+  assert.equal(db.tables.user_settings[0].wake, "06:30");
+  assert.equal(db.tables.tasks[0].id, "legacy-task");
+  assert.equal(db.tables.events[0].id, "legacy-event");
+  assert.equal(db.tables.task_history[0].id, "legacy-history");
+});
+
 function installMemoryStorage() {
   const values = new Map();
   globalThis.localStorage = {
@@ -229,7 +280,8 @@ function createFakeSupabase(seed = {}) {
     user_settings: [...(seed.user_settings || [])],
     tasks: [...(seed.tasks || [])],
     events: [...(seed.events || [])],
-    task_history: [...(seed.task_history || [])]
+    task_history: [...(seed.task_history || [])],
+    user_states: [...(seed.user_states || [])]
   };
 
   const client = {
@@ -309,6 +361,7 @@ class FakeQuery {
 
 function samePrimaryKey(table, left, right) {
   if (table === "user_settings") return left.user_id === right.user_id;
+  if (table === "user_states") return left.user_id === right.user_id;
   if (table === "task_history") return left.user_id === right.user_id && left.task_id === right.task_id && left.id === right.id;
   return left.user_id === right.user_id && left.id === right.id;
 }
