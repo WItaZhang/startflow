@@ -205,33 +205,187 @@ export function createSupabaseRepository(client, userId) {
       return cache.loadCachedState();
     },
     async loadState() {
-      const { data, error } = await client
-        .from("user_states")
-        .select("state")
-        .eq("user_id", userId)
-        .maybeSingle();
+      const [settingsResult, tasksResult, eventsResult, historyResult] = await Promise.all([
+        client.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
+        client.from("tasks").select("*").eq("user_id", userId).order("deadline", { ascending: true }),
+        client.from("events").select("*").eq("user_id", userId).order("start_at", { ascending: true }),
+        client.from("task_history").select("*").eq("user_id", userId).order("happened_at", { ascending: true })
+      ]);
 
-      if (error) throw error;
-      if (data?.state) {
-        await cache.saveState(data.state);
-        return data.state;
+      throwIfSupabaseError(settingsResult, tasksResult, eventsResult, historyResult);
+
+      const hasRemoteData =
+        Boolean(settingsResult.data) ||
+        Boolean(tasksResult.data?.length) ||
+        Boolean(eventsResult.data?.length) ||
+        Boolean(historyResult.data?.length);
+
+      if (!hasRemoteData) {
+        const initial = cache.loadCachedState() || sampleState();
+        await this.saveState(initial);
+        return initial;
       }
 
-      const initial = cache.loadCachedState() || sampleState();
-      await this.saveState(initial);
-      return initial;
+      const remoteState = stateFromSupabaseRows({
+        settings: settingsResult.data,
+        tasks: tasksResult.data || [],
+        events: eventsResult.data || [],
+        history: historyResult.data || []
+      });
+      await cache.saveState(remoteState);
+      return remoteState;
     },
     async saveState(state) {
       const nextState = migrateState(state);
       await cache.saveState(nextState);
-      const { error } = await client.from("user_states").upsert({
-        user_id: userId,
-        state: nextState,
-        updated_at: new Date().toISOString()
-      });
-      if (error) throw error;
+      await saveNormalizedState(client, userId, nextState);
     }
   };
+}
+
+async function saveNormalizedState(client, userId, state) {
+  const settingsResult = await client.from("user_settings").upsert(settingsToSupabaseRow(userId, state.settings));
+  throwIfSupabaseError(settingsResult);
+
+  const taskRows = state.tasks.map((task) => taskToSupabaseRow(userId, task));
+  if (taskRows.length) {
+    throwIfSupabaseError(await client.from("tasks").upsert(taskRows));
+  }
+
+  const eventRows = state.events.map((event) => eventToSupabaseRow(userId, event));
+  if (eventRows.length) {
+    throwIfSupabaseError(await client.from("events").upsert(eventRows));
+  }
+
+  throwIfSupabaseError(await client.from("task_history").delete().eq("user_id", userId));
+  const historyRows = state.tasks.flatMap((task) => (task.history || []).map((item) => historyToSupabaseRow(userId, task.id, item)));
+  if (historyRows.length) {
+    throwIfSupabaseError(await client.from("task_history").upsert(historyRows));
+  }
+
+  await deleteMissingRows(client, userId, "events", state.events.map((event) => event.id));
+  await deleteMissingRows(client, userId, "tasks", state.tasks.map((task) => task.id));
+}
+
+async function deleteMissingRows(client, userId, table, idsToKeep) {
+  const keep = new Set(idsToKeep);
+  const { data, error } = await client.from(table).select("id").eq("user_id", userId);
+  if (error) throw error;
+  const staleIds = (data || []).map((row) => row.id).filter((id) => !keep.has(id));
+
+  for (const id of staleIds) {
+    const result = await client.from(table).delete().eq("user_id", userId).eq("id", id);
+    throwIfSupabaseError(result);
+  }
+}
+
+function stateFromSupabaseRows({ settings, tasks, events, history }) {
+  const historyByTask = new Map();
+  for (const item of history) {
+    const list = historyByTask.get(item.task_id) || [];
+    list.push({
+      id: item.id,
+      label: item.label,
+      minutes: Number(item.minutes || 0),
+      at: item.happened_at
+    });
+    historyByTask.set(item.task_id, list);
+  }
+
+  return migrateState({
+    version: 1,
+    settings: settings
+      ? {
+          wake: settings.wake,
+          sleep: settings.sleep,
+          minBlock: settings.min_block,
+          maxBlock: settings.max_block,
+          dailyBuffer: settings.daily_buffer,
+          deadlineBufferHours: settings.deadline_buffer_hours
+        }
+      : undefined,
+    tasks: tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      duration: Number(task.duration || 0),
+      doneMinutes: Number(task.done_minutes || 0),
+      deadline: task.deadline,
+      mode: task.mode,
+      dependsOn: task.depends_on || "",
+      minBlock: nullableNumber(task.min_block),
+      maxBlock: nullableNumber(task.max_block),
+      startHint: task.start_hint || "",
+      missedCount: Number(task.missed_count || 0),
+      history: historyByTask.get(task.id) || []
+    })),
+    events: events.map((event) => ({
+      id: event.id,
+      title: event.title,
+      start: event.start_at,
+      end: event.end_at,
+      repeating: Boolean(event.repeating)
+    }))
+  });
+}
+
+function settingsToSupabaseRow(userId, settings) {
+  return {
+    user_id: userId,
+    wake: settings.wake,
+    sleep: settings.sleep,
+    min_block: settings.minBlock,
+    max_block: settings.maxBlock,
+    daily_buffer: settings.dailyBuffer,
+    deadline_buffer_hours: settings.deadlineBufferHours
+  };
+}
+
+function taskToSupabaseRow(userId, task) {
+  return {
+    user_id: userId,
+    id: task.id,
+    title: task.title,
+    duration: task.duration,
+    done_minutes: Math.min(task.doneMinutes || 0, task.duration),
+    deadline: task.deadline,
+    mode: task.mode || "auto",
+    depends_on: task.dependsOn || null,
+    min_block: nullableNumber(task.minBlock),
+    max_block: nullableNumber(task.maxBlock),
+    start_hint: task.startHint || "",
+    missed_count: task.missedCount || 0
+  };
+}
+
+function eventToSupabaseRow(userId, event) {
+  return {
+    user_id: userId,
+    id: event.id,
+    title: event.title,
+    start_at: event.start,
+    end_at: event.end,
+    repeating: Boolean(event.repeating)
+  };
+}
+
+function historyToSupabaseRow(userId, taskId, item) {
+  return {
+    user_id: userId,
+    task_id: taskId,
+    id: item.id,
+    label: item.label,
+    minutes: Number(item.minutes || 0),
+    happened_at: item.at || new Date().toISOString()
+  };
+}
+
+function throwIfSupabaseError(...results) {
+  const failure = results.find((result) => result?.error);
+  if (failure) throw failure.error;
+}
+
+function nullableNumber(value) {
+  return value === "" || value == null || Number.isNaN(Number(value)) ? null : Number(value);
 }
 
 export function migrateState(state) {
