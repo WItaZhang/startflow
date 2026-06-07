@@ -424,18 +424,85 @@ function renderAlgorithmPage(state, plan) {
   const semanticCount = unfinishedTasks.filter((task) => task.breakdownMode === "semantic").length;
   const starterCount = taskBlocks.filter((block) => block.isStarter).length;
   const highEnergyCount = taskBlocks.filter((block) => block.energy === "high").length;
+  const scheduledMinutes = taskBlocks.reduce((sum, block) => sum + block.minutes, 0);
+  const requiredMinutes = workUnits.reduce((sum, unit) => sum + unit.minutes, 0);
+  const coverage = requiredMinutes ? Math.min(1, scheduledMinutes / requiredMinutes) : 1;
+  const semanticRatio = unfinishedTasks.length ? semanticCount / unfinishedTasks.length : 0;
+  const riskPenalty = Math.min(1, plan.risks.length / 4);
+  const starterSignal = semanticCount ? Math.min(1, starterCount / semanticCount) : 1;
+  const qualityScore = clamp(Math.round(coverage * 64 + starterSignal * 18 + (1 - riskPenalty) * 18), 0, 100);
+  const upcomingBlocks = taskBlocks.filter((block) => block.end > new Date()).slice(0, 5);
   const modules = [
-    ["任务拆解层", "直接按时长保留原任务；按语义步骤生成启动、推进、检查和收尾工作单元。"],
-    ["估时校准层", "失败记录会降低单次块长、提高提前安排权重，让重排更贴近真实执行能力。"],
-    ["评分排程层", "每个可用时间槽都会被打分，综合 DDL、优先级、能量匹配、依赖和碎片化成本。"],
-    ["反馈重排层", "完成、部分完成和没能做到都会写入历史；下一次 buildPlan 会使用最新进度。"]
+    {
+      icon: "schema",
+      kicker: `${workUnits.length} units`,
+      title: "任务拆解层",
+      body: "直接按时长保留原任务；按语义步骤生成启动、推进、检查和收尾工作单元。",
+      chips: ["time-safe", "semantic"]
+    },
+    {
+      icon: "monitoring",
+      kicker: `${starterCount} starters`,
+      title: "启动摩擦层",
+      body: "失败记录会降低单次块长、提高提前安排权重，让重排更贴近真实执行能力。",
+      chips: ["miss-aware", "shorter blocks"]
+    },
+    {
+      icon: "rule_settings",
+      kicker: `${taskBlocks.length} blocks`,
+      title: "评分排程层",
+      body: "每个可用时间槽都会被打分，综合 DDL、优先级、能量匹配、依赖和碎片化成本。",
+      chips: ["slot score", "capacity"]
+    },
+    {
+      icon: "sync",
+      kicker: `${plan.risks.length} risks`,
+      title: "反馈重排层",
+      body: "完成、部分完成和没能做到都会写入历史；下一次 buildPlan 会使用最新进度。",
+      chips: ["history", "replan"]
+    }
   ];
+
+  $("#algorithmOverview").innerHTML = `
+    <article class="algorithm-health">
+      <div class="score-ring" style="--score: ${qualityScore}%">
+        <strong>${qualityScore}</strong>
+        <span>score</span>
+      </div>
+      <div>
+        <p class="eyebrow">Plan Health</p>
+        <h3>${qualityScore >= 82 ? "当前计划结构健康" : qualityScore >= 62 ? "当前计划可执行，但有压力" : "当前计划需要调整"}</h3>
+        <p>覆盖率 ${formatPercent(coverage)}，语义拆解率 ${formatPercent(semanticRatio)}，风险 ${plan.risks.length} 个。</p>
+      </div>
+    </article>
+    <article class="algorithm-kpi">
+      <span>已排任务量</span>
+      <strong>${formatDuration(scheduledMinutes)}</strong>
+      <i>${taskBlocks.length} 个时间块</i>
+    </article>
+    <article class="algorithm-kpi">
+      <span>启动保护</span>
+      <strong>${starterCount}</strong>
+      <i>starter blocks</i>
+    </article>
+    <article class="algorithm-kpi">
+      <span>高能量窗口</span>
+      <strong>${highEnergyCount}</strong>
+      <i>deep work blocks</i>
+    </article>`;
 
   $("#algorithmModules").innerHTML = modules
     .map(
-      ([title, body]) => `<article class="algorithm-card">
-        <strong>${title}</strong>
-        <p>${body}</p>
+      (module) => `<article class="algorithm-card">
+        <div class="algorithm-card-head">
+          <span class="material-symbols-outlined">${module.icon}</span>
+          <small>${module.kicker}</small>
+        </div>
+        <strong>${module.title}</strong>
+        <p>${module.body}</p>
+        <div class="algorithm-chip-row">
+          ${module.chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join("")}
+        </div>
       </article>`
     )
     .join("");
@@ -447,7 +514,7 @@ function renderAlgorithmPage(state, plan) {
         <h3>实时算法输出</h3>
       </div>
     </div>
-    <div class="insight-summary algorithm-summary">
+    <div class="algorithm-output-grid">
       <div><strong>${unfinishedTasks.length}</strong><span>未完成任务</span></div>
       <div><strong>${workUnits.length}</strong><span>工作单元</span></div>
       <div><strong>${taskBlocks.length}</strong><span>已排时间块</span></div>
@@ -472,7 +539,42 @@ function renderAlgorithmPage(state, plan) {
         <b>4. Fit</b>
         <span>枚举空档，选择评分最高且满足容量约束的时间槽。</span>
       </article>
+    </div>
+    <div class="algorithm-block-list">
+      <div class="algorithm-section-head">
+        <b>下一批输出块</b>
+        <span>${upcomingBlocks.length ? "按当前计划顺序展示" : "暂无未来任务块"}</span>
+      </div>
+      ${
+        upcomingBlocks.length
+          ? upcomingBlocks
+              .map(
+                (block) => `<article>
+                  <div>
+                    <strong>${escapeHtml(block.title)}</strong>
+                    <span>${formatDate(block.start)} · ${formatRange(block.start, block.end)} · ${block.minutes} 分钟</span>
+                  </div>
+                  <em>${block.isStarter ? "starter" : block.energy || "auto"}</em>
+                </article>`
+              )
+              .join("")
+          : `<div class="empty-state">当前没有排入未来的任务块。</div>`
+      }
     </div>`;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function formatPercent(value) {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatDuration(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours ? `${hours}h ${rest}m` : `${rest}m`;
 }
 
 function priorityLabel(priority) {

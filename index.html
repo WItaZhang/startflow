@@ -277,22 +277,65 @@
 
         <section class="view" id="algorithmView">
           <div class="algorithm-layout">
-            <section class="panel algorithm-hero">
-              <div>
-                <p class="eyebrow">StartFlow Algorithm v2</p>
-                <h3>从“大任务”到“能开始的时间块”</h3>
+            <section class="algorithm-hero">
+              <div class="algorithm-hero-copy">
+                <div>
+                  <p class="eyebrow">StartFlow Algorithm v2</p>
+                  <h3>从“大任务”到“能开始的时间块”</h3>
+                </div>
+                <p>
+                  系统先把任务转成工作单元，再按 DDL、优先级、依赖、能量需求和启动摩擦对时间槽评分。直接按时长的任务不会被语义改写；按语义步骤的任务会生成启动块、推进块和收尾块。
+                </p>
+                <div class="algorithm-badges">
+                  <span>Semantic Units</span>
+                  <span>Weighted Slots</span>
+                  <span>Feedback Loop</span>
+                </div>
               </div>
-              <p>
-                系统先把任务转成工作单元，再按 DDL、优先级、依赖、能量需求和启动摩擦对时间槽评分。直接按时长的任务不会被语义改写；按语义步骤的任务会生成启动块、推进块和收尾块。
-              </p>
-              <div class="formula-strip">
-                <span>slotScore</span>
-                <strong>= DDL压力 + 优先级 + 依赖解锁 + 能量匹配 - 启动摩擦 - 延迟惩罚 - 碎片惩罚</strong>
+              <div class="algorithm-score-panel">
+                <div class="score-panel-head">
+                  <span class="material-symbols-outlined">query_stats</span>
+                  <div>
+                    <p class="eyebrow">Slot Score</p>
+                    <strong>候选时间槽评分</strong>
+                  </div>
+                </div>
+                <div class="formula-stack">
+                  <span>DDL压力</span>
+                  <span>优先级</span>
+                  <span>依赖解锁</span>
+                  <span>能量匹配</span>
+                  <i>-</i>
+                  <span>启动摩擦</span>
+                  <span>延迟惩罚</span>
+                  <span>碎片惩罚</span>
+                </div>
+                <div class="formula-strip">
+                  <span>slotScore</span>
+                  <strong>= 正向驱动 - 执行阻力</strong>
+                </div>
               </div>
             </section>
 
+            <section class="algorithm-overview" id="algorithmOverview"></section>
             <section class="algorithm-grid" id="algorithmModules"></section>
-            <section class="panel" id="algorithmMetrics"></section>
+            <section class="algorithm-bottom">
+              <section class="panel" id="algorithmMetrics"></section>
+              <section class="panel algorithm-glossary">
+                <div class="panel-head">
+                  <div>
+                    <p class="eyebrow">评分信号</p>
+                    <h3>为什么这块会被排到这里</h3>
+                  </div>
+                </div>
+                <div class="signal-list">
+                  <div><b>DDL 压力</b><span>越接近截止时间，越早进入可用槽。</span></div>
+                  <div><b>能量匹配</b><span>高能量任务优先上午或下午深度工作窗口。</span></div>
+                  <div><b>启动摩擦</b><span>连续错过会缩短块长，先安排更容易开始的入口。</span></div>
+                  <div><b>碎片成本</b><span>避免产生过短尾巴和频繁上下文切换。</span></div>
+                </div>
+              </section>
+            </section>
           </div>
         </section>
       </main>
