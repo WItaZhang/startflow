@@ -1,10 +1,10 @@
-import { toDateInputValue } from "../domain/time.js";
 import { $, closeDialog, showToast } from "./dom.js";
 
 export function bindForms(store, getCurrentPlan) {
   const taskModal = $("#taskModal");
   const eventModal = $("#eventModal");
   const partialModal = $("#partialModal");
+  setupDateTimeControls();
 
   ["#openTaskModal", "#openTaskModal2", "#fab"].forEach((selector) => {
     $(selector).addEventListener("click", () => openTaskModal(taskModal));
@@ -19,6 +19,7 @@ export function bindForms(store, getCurrentPlan) {
     event.preventDefault();
     const form = event.currentTarget;
     clearFormError(form);
+    syncDateTimeControls(form);
     const data = formData(form);
     const deadline = new Date(data.deadline);
 
@@ -55,6 +56,7 @@ export function bindForms(store, getCurrentPlan) {
     event.preventDefault();
     const form = event.currentTarget;
     clearFormError(form);
+    syncDateTimeControls(form);
     const data = formData(form);
     const start = new Date(data.start);
     const end = new Date(data.end);
@@ -134,8 +136,6 @@ export function openPartialModal(block) {
 function openTaskModal(modal, task = null) {
   const form = $("#taskForm");
   const deadline = new Date();
-  deadline.setDate(deadline.getDate() + 3);
-  deadline.setHours(23, 0, 0, 0);
 
   clearFormError(form);
   form.reset();
@@ -144,7 +144,7 @@ function openTaskModal(modal, task = null) {
   form.taskId.value = task?.id || "";
   form.title.value = task?.title || "";
   form.duration.value = task?.duration ?? 90;
-  form.deadline.value = toDateInputValue(task ? new Date(task.deadline) : deadline);
+  setDateTimeControl(form, "deadline", task ? new Date(task.deadline) : deadline);
   form.mode.value = task?.mode || "auto";
   form.dependsOn.value = task?.dependsOn || "";
   form.minBlock.value = task?.minBlock ?? "";
@@ -157,7 +157,6 @@ function openTaskModal(modal, task = null) {
 function openEventModal(modal, event = null) {
   const form = $("#eventForm");
   const start = new Date();
-  start.setHours(start.getHours() + 1, 0, 0, 0);
   const end = new Date(start);
   end.setHours(end.getHours() + 1);
 
@@ -167,8 +166,8 @@ function openEventModal(modal, event = null) {
   $("#eventSubmitLabel").textContent = event ? "保存修改并重排" : "保存并重排";
   form.eventId.value = event?.id || "";
   form.title.value = event?.title || "";
-  form.start.value = toDateInputValue(event ? new Date(event.start) : start);
-  form.end.value = toDateInputValue(event ? new Date(event.end) : end);
+  setDateTimeControl(form, "start", event ? new Date(event.start) : start);
+  setDateTimeControl(form, "end", event ? new Date(event.end) : end);
   form.repeating.checked = Boolean(event?.repeating);
   modal.showModal();
 }
@@ -200,4 +199,55 @@ function syncDependencyOptions(editingTaskId) {
   [...select.options].forEach((option) => {
     option.disabled = Boolean(editingTaskId) && option.value === editingTaskId;
   });
+}
+
+function setupDateTimeControls() {
+  document.querySelectorAll("[data-datetime-field]").forEach((control) => {
+    const hour = control.querySelector("[data-hour]");
+    const minute = control.querySelector("[data-minute]");
+    if (!hour.options.length) {
+      hour.innerHTML = range(24).map((value) => `<option value="${pad(value)}">${pad(value)}</option>`).join("");
+    }
+    if (!minute.options.length) {
+      minute.innerHTML = range(60).map((value) => `<option value="${pad(value)}">${pad(value)}</option>`).join("");
+    }
+    control.querySelectorAll("input, select").forEach((input) => {
+      input.addEventListener("change", () => syncDateTimeControl(control));
+    });
+  });
+}
+
+function setDateTimeControl(form, fieldName, date) {
+  const value = new Date(date);
+  const control = form.querySelector(`[data-datetime-field="${fieldName}"]`);
+  if (!control) return;
+  control.querySelector("[data-date]").value = datePart(value);
+  control.querySelector("[data-hour]").value = pad(value.getHours());
+  control.querySelector("[data-minute]").value = pad(value.getMinutes());
+  syncDateTimeControl(control);
+}
+
+function syncDateTimeControls(form) {
+  form.querySelectorAll("[data-datetime-field]").forEach(syncDateTimeControl);
+}
+
+function syncDateTimeControl(control) {
+  const fieldName = control.dataset.datetimeField;
+  const form = control.closest("form");
+  const date = control.querySelector("[data-date]").value;
+  const hour = control.querySelector("[data-hour]").value;
+  const minute = control.querySelector("[data-minute]").value;
+  form.elements[fieldName].value = date && hour && minute ? `${date}T${hour}:${minute}` : "";
+}
+
+function datePart(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function pad(value) {
+  return String(value).padStart(2, "0");
+}
+
+function range(length) {
+  return Array.from({ length }, (_, index) => index);
 }

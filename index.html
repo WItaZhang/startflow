@@ -264,7 +264,15 @@
           </label>
           <label>
             截止时间
-            <input name="deadline" type="datetime-local" required />
+            <input name="deadline" type="hidden" required />
+            <div class="datetime-wheel" data-datetime-field="deadline">
+              <input type="date" data-date aria-label="截止日期" />
+              <div class="time-wheel" aria-label="截止时间">
+                <select data-hour size="5" aria-label="小时"></select>
+                <span class="time-separator">:</span>
+                <select data-minute size="5" aria-label="分钟"></select>
+              </div>
+            </div>
           </label>
           <label>
             完成方式
@@ -318,11 +326,27 @@
           </label>
           <label>
             开始
-            <input name="start" type="datetime-local" required />
+            <input name="start" type="hidden" required />
+            <div class="datetime-wheel" data-datetime-field="start">
+              <input type="date" data-date aria-label="开始日期" />
+              <div class="time-wheel" aria-label="开始时间">
+                <select data-hour size="5" aria-label="小时"></select>
+                <span class="time-separator">:</span>
+                <select data-minute size="5" aria-label="分钟"></select>
+              </div>
+            </div>
           </label>
           <label>
             结束
-            <input name="end" type="datetime-local" required />
+            <input name="end" type="hidden" required />
+            <div class="datetime-wheel" data-datetime-field="end">
+              <input type="date" data-date aria-label="结束日期" />
+              <div class="time-wheel" aria-label="结束时间">
+                <select data-hour size="5" aria-label="小时"></select>
+                <span class="time-separator">:</span>
+                <select data-minute size="5" aria-label="分钟"></select>
+              </div>
+            </div>
           </label>
           <label class="check-row form-span">
             <input name="repeating" type="checkbox" />
