@@ -351,32 +351,33 @@ main {
 
 .timeline {
   position: relative;
-  display: grid;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-left: 68px;
   padding-right: 8px;
-  border-left: 1px solid rgba(194, 199, 205, 0.8);
 }
 
 .time-row {
-  position: relative;
-  min-height: 68px;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  flex: 0 0 auto;
 }
 
 .time-label {
-  position: absolute;
-  left: -68px;
-  top: 10px;
-  width: 52px;
+  padding-top: 12px;
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.4;
   text-align: right;
 }
 
 .schedule-block {
+  min-width: 0;
   border: 1px solid var(--outline);
   border-left-width: 4px;
   border-radius: 8px;
@@ -430,12 +431,13 @@ main {
 
 .block-actions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 14px;
 }
 
 .mini-button {
+  min-width: 0;
   min-height: 34px;
   border-radius: 8px;
   background: var(--surface-mid);
