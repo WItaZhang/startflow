@@ -4,7 +4,7 @@ import { addDays, startOfDay } from "./domain/time.js";
 import { $, showToast } from "./ui/dom.js";
 import { bindForms, openEditEventModal, openEditTaskModal, openPartialModal } from "./ui/forms.js";
 import { bindNavigation } from "./ui/navigation.js";
-import { renderApp } from "./ui/render.js";
+import { renderApp, renderInsightModal } from "./ui/render.js";
 
 const store = createStore();
 let selectedView = "today";
@@ -61,6 +61,16 @@ bindForms(store, () => currentPlan);
 $("#rescheduleButton").addEventListener("click", () => {
   render();
   showToast("已根据当前任务、睡眠和不可用时间重新规划。");
+});
+
+$("#openLoadModal").addEventListener("click", () => {
+  renderInsightModal("load", store.getState(), currentPlan);
+  $("#insightModal").showModal();
+});
+
+$("#openRiskModal").addEventListener("click", () => {
+  renderInsightModal("risk", store.getState(), currentPlan);
+  $("#insightModal").showModal();
 });
 
 $("#openClearModal").addEventListener("click", () => {

@@ -13,6 +13,14 @@ export function renderApp({ state, plan, selectedView, calendarDate, actions }) 
   updateViewTitles(selectedView);
 }
 
+export function renderInsightModal(type, state, plan) {
+  if (type === "load") {
+    renderLoadInsight(plan);
+    return;
+  }
+  renderRiskInsight(state, plan);
+}
+
 function renderStats(state, plan) {
   const unfinished = state.tasks.filter((task) => task.doneMinutes < task.duration);
   $("#taskCount").textContent = `${unfinished.length} 个`;
@@ -225,6 +233,93 @@ function highLoadRange(blocks) {
   const first = new Date(heavy[0][0]);
   const last = new Date(heavy.at(-1)[0]);
   return heavy.length === 1 ? formatDate(first) : `${formatDate(first)} - ${formatDate(last)}`;
+}
+
+function renderLoadInsight(plan) {
+  const taskBlocks = plan.blocks.filter((block) => block.type === "task");
+  const byDay = new Map();
+
+  for (const block of taskBlocks) {
+    const key = dayKey(block.start);
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(block);
+  }
+
+  const rows = [...byDay.entries()]
+    .map(([key, blocks]) => ({
+      date: new Date(key),
+      blocks,
+      minutes: blocks.reduce((sum, block) => sum + block.minutes, 0)
+    }))
+    .sort((a, b) => a.date - b.date);
+  const highRows = rows.filter((row) => row.minutes >= 180);
+  const totalMinutes = rows.reduce((sum, row) => sum + row.minutes, 0);
+
+  $("#insightEyebrow").textContent = "高负荷预警";
+  $("#insightTitle").textContent = highRows.length ? `${highRows.length} 天负荷偏高` : "当前没有高负荷日";
+  $("#insightBody").innerHTML = `
+    <div class="insight-summary">
+      <div><strong>${Math.floor(totalMinutes / 60)}小时${totalMinutes % 60}分钟</strong><span>未来计划任务量</span></div>
+      <div><strong>${taskBlocks.length} 个</strong><span>已排任务块</span></div>
+      <div><strong>${highRows.length} 天</strong><span>超过 3 小时</span></div>
+    </div>
+    ${
+      rows.length
+        ? `<div class="insight-list">
+            ${rows
+              .map(
+                (row) => `<article class="insight-row ${row.minutes >= 180 ? "is-warning" : ""}">
+                  <div>
+                    <strong>${formatDate(row.date)}</strong>
+                    <span>${row.blocks.map((block) => escapeHtml(block.title)).join("、")}</span>
+                  </div>
+                  <b>${Math.floor(row.minutes / 60)}小时${row.minutes % 60}分钟</b>
+                </article>`
+              )
+              .join("")}
+          </div>`
+        : `<div class="empty-state">当前没有已排入的任务块。</div>`
+    }
+  `;
+}
+
+function renderRiskInsight(state, plan) {
+  const tasks = new Map(state.tasks.map((task) => [task.id, task]));
+  const capacity = plan.risks.filter((risk) => risk.type === "capacity");
+  const dependency = plan.risks.filter((risk) => risk.type === "dependency");
+
+  $("#insightEyebrow").textContent = "存在风险";
+  $("#insightTitle").textContent = plan.risks.length ? `${plan.risks.length} 个风险需要处理` : "当前没有明显风险";
+  $("#insightBody").innerHTML = `
+    <div class="insight-summary">
+      <div><strong>${plan.risks.length} 个</strong><span>总风险</span></div>
+      <div><strong>${capacity.length} 个</strong><span>时间不足</span></div>
+      <div><strong>${dependency.length} 个</strong><span>依赖问题</span></div>
+    </div>
+    ${
+      plan.risks.length
+        ? `<div class="insight-list">
+            ${plan.risks
+              .map((risk) => {
+                const task = tasks.get(risk.taskId);
+                const title = task?.title || "未知任务";
+                const detail =
+                  risk.type === "capacity"
+                    ? "DDL 前可用时间不足，可能需要调整截止时间、减少任务时长或释放固定安排。"
+                    : "依赖任务无法先完成，所以这个任务暂时无法可靠排入。";
+                return `<article class="insight-row is-risk">
+                  <div>
+                    <strong>${escapeHtml(title)}</strong>
+                    <span>${detail}</span>
+                  </div>
+                  <b>${risk.type === "capacity" ? "时间不足" : "依赖问题"}</b>
+                </article>`;
+              })
+              .join("")}
+          </div>`
+        : `<div class="empty-state">当前任务都可以在现有约束下排入计划。</div>`
+    }
+  `;
 }
 
 function modeLabel(mode) {

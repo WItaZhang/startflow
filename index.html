@@ -75,20 +75,20 @@
                 <strong id="taskCount">0 个</strong>
               </div>
             </article>
-            <article class="stat-card warning">
+            <button class="stat-card warning stat-button" id="openLoadModal" type="button">
               <div class="stat-icon warm"><span class="material-symbols-outlined">priority_high</span></div>
               <div>
                 <p>高负荷预警</p>
                 <strong id="loadRange">暂无</strong>
               </div>
-            </article>
-            <article class="stat-card danger">
+            </button>
+            <button class="stat-card danger stat-button" id="openRiskModal" type="button">
               <div class="stat-icon red"><span class="material-symbols-outlined">event_busy</span></div>
               <div>
                 <p>存在风险</p>
                 <strong id="riskCount">0 个</strong>
               </div>
-            </article>
+            </button>
           </div>
 
           <div class="today-layout">
@@ -374,6 +374,19 @@
           <button class="button primary danger-primary" value="default" type="submit">确认清理</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog class="modal" id="insightModal">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow" id="insightEyebrow">计划详情</p>
+            <h3 id="insightTitle">详情</h3>
+          </div>
+          <button class="icon-button" type="button" data-close-modal aria-label="关闭"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div id="insightBody" class="insight-body"></div>
+      </div>
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
