@@ -81,6 +81,8 @@ export function normalizeTask(task) {
     deadline: task.deadline,
     mode: task.mode || "auto",
     dependsOn: task.dependsOn || "",
+    minBlock: task.minBlock,
+    maxBlock: task.maxBlock,
     startHint: task.startHint || "",
     missedCount: numberOr(task.missedCount, 0),
     history: Array.isArray(task.history) ? task.history : []
@@ -122,6 +124,10 @@ function scheduleTask(task, { busy, settings, startAfter, latestEnd }) {
   }
 
   while (remaining > 0) {
+    if (remaining < minBlock && blocks.length > 0) {
+      break;
+    }
+
     const slot = findNextFreeSlot({
       busy,
       startAfter: blocks.at(-1)?.end ?? startAfter,
@@ -136,7 +142,9 @@ function scheduleTask(task, { busy, settings, startAfter, latestEnd }) {
     if (task.mode === "single" && remaining <= minutesBetween(slot.start, slot.end)) {
       minutes = remaining;
     }
-    if (minutes < Math.min(minBlock, remaining)) break;
+    if (minutes < minBlock && remaining > minBlock) {
+      break;
+    }
 
     const block = {
       id: cryptoId("block"),
@@ -189,7 +197,11 @@ function findNextFreeSlot({ busy, startAfter, latestEnd, minMinutes, settings })
 }
 
 function chooseBlockSize(task, minBlock, maxBlock, remaining) {
-  if (task.mode === "single") return Math.max(minBlock, remaining);
+  if (task.mode === "single") return remaining;
+  if (remaining <= minBlock) return remaining;
+  const minimumParts = Math.ceil(remaining / maxBlock);
+  const evenBlock = Math.ceil(remaining / minimumParts);
+  if (evenBlock >= minBlock && evenBlock <= maxBlock) return evenBlock;
   if (task.mode === "split") return Math.min(maxBlock, Math.max(minBlock, Math.ceil(remaining / 3)));
   if (remaining <= maxBlock) return remaining;
   return Math.min(maxBlock, Math.max(minBlock, 60));

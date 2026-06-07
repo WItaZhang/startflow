@@ -2,7 +2,7 @@ import { createStore } from "./data/store.js";
 import { buildPlan } from "./domain/scheduler.js";
 import { addDays, startOfDay } from "./domain/time.js";
 import { $, showToast } from "./ui/dom.js";
-import { bindForms, openPartialModal } from "./ui/forms.js";
+import { bindForms, openEditTaskModal, openPartialModal } from "./ui/forms.js";
 import { bindNavigation } from "./ui/navigation.js";
 import { renderApp } from "./ui/render.js";
 
@@ -26,6 +26,10 @@ const actions = {
     }
   },
   onTaskAction(action, taskId) {
+    if (action === "edit") {
+      const task = store.getState().tasks.find((item) => item.id === taskId);
+      if (task) openEditTaskModal(task);
+    }
     if (action === "done") {
       store.markTaskDone(taskId);
       showToast("任务已标记完成。");

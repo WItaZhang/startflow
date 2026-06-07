@@ -17,41 +17,61 @@ export function bindForms(store, getCurrentPlan) {
 
   $("#taskForm").addEventListener("submit", (event) => {
     event.preventDefault();
-    const data = formData(event.currentTarget);
+    const form = event.currentTarget;
+    clearFormError(form);
+    const data = formData(form);
     const deadline = new Date(data.deadline);
-    if (!Number.isFinite(deadline.getTime())) return showToast("请填写有效的截止时间。");
 
-    store.addTask({
-      title: data.title,
+    if (!data.title.trim()) return setFormError(form, "请填写任务名。");
+    if (!Number.isFinite(Number(data.duration)) || Number(data.duration) <= 0) return setFormError(form, "请填写有效的预计总时长。");
+    if (!Number.isFinite(deadline.getTime())) return setFormError(form, "请填写有效的截止时间。");
+    if (data.minBlock && data.maxBlock && Number(data.minBlock) > Number(data.maxBlock)) return setFormError(form, "最短单次不能大于最长单次。");
+    if (data.taskId && data.dependsOn === data.taskId) return setFormError(form, "任务不能依赖自己。");
+
+    const payload = {
+      title: data.title.trim(),
       duration: Number(data.duration),
       deadline: deadline.toISOString(),
       mode: data.mode,
       dependsOn: data.dependsOn,
       minBlock: optionalNumber(data.minBlock),
       maxBlock: optionalNumber(data.maxBlock),
-      startHint: data.startHint
-    });
+      startHint: data.startHint.trim()
+    };
+
+    if (data.taskId) {
+      store.updateTask(data.taskId, payload);
+      showToast("任务已更新，并重新排程。");
+    } else {
+      store.addTask(payload);
+      showToast("任务已加入计划，并自动排程。");
+    }
+
     closeDialog(taskModal);
-    event.currentTarget.reset();
-    showToast("任务已加入计划，并自动排程。");
+    form.reset();
   });
 
   $("#eventForm").addEventListener("submit", (event) => {
     event.preventDefault();
-    const data = formData(event.currentTarget);
+    const form = event.currentTarget;
+    clearFormError(form);
+    const data = formData(form);
     const start = new Date(data.start);
     const end = new Date(data.end);
+
+    if (!data.title.trim()) return setFormError(form, "请填写日程名。");
     if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
-      return showToast("请填写有效的开始和结束时间。");
+      return setFormError(form, "请填写有效的开始和结束时间，结束时间必须晚于开始时间。");
     }
+
     store.addEvent({
-      title: data.title,
+      title: data.title.trim(),
       start: start.toISOString(),
       end: end.toISOString(),
       repeating: Boolean(data.repeating)
     });
     closeDialog(eventModal);
-    event.currentTarget.reset();
+    form.reset();
     showToast("日程已保存，排程会避开这段时间。");
   });
 
@@ -71,37 +91,67 @@ export function bindForms(store, getCurrentPlan) {
 
   $("#partialForm").addEventListener("submit", (event) => {
     event.preventDefault();
-    const data = formData(event.currentTarget);
+    const form = event.currentTarget;
+    clearFormError(form);
+    const data = formData(form);
     const block = getCurrentPlan().blocks.find((item) => item.id === data.blockId);
     if (!block) return closeDialog(partialModal);
-    store.partiallyCompleteBlock(block, Number(data.minutes));
+
+    const minutes = Number(data.minutes);
+    if (!Number.isFinite(minutes) || minutes <= 0) return setFormError(form, "请填写有效的完成分钟数。");
+
+    store.partiallyCompleteBlock(block, minutes);
     closeDialog(partialModal);
     showToast("已记录部分完成，剩余时间已重排。");
   });
 }
 
+export function openEditTaskModal(task) {
+  openTaskModal($("#taskModal"), task);
+}
+
 export function openPartialModal(block) {
   const modal = $("#partialModal");
-  $("#partialForm").blockId.value = block.id;
-  $("#partialForm").minutes.value = Math.min(15, block.minutes);
+  const form = $("#partialForm");
+  clearFormError(form);
+  form.blockId.value = block.id;
+  form.minutes.value = Math.min(15, block.minutes);
   modal.showModal();
 }
 
-function openTaskModal(modal) {
+function openTaskModal(modal, task = null) {
+  const form = $("#taskForm");
   const deadline = new Date();
   deadline.setDate(deadline.getDate() + 3);
   deadline.setHours(23, 0, 0, 0);
-  $("#taskForm").deadline.value = toDateInputValue(deadline);
+
+  clearFormError(form);
+  form.reset();
+  $("#taskModalTitle").textContent = task ? "编辑任务" : "新建任务";
+  $("#taskSubmitLabel").textContent = task ? "保存修改并排程" : "保存并排程";
+  form.taskId.value = task?.id || "";
+  form.title.value = task?.title || "";
+  form.duration.value = task?.duration ?? 90;
+  form.deadline.value = toDateInputValue(task ? new Date(task.deadline) : deadline);
+  form.mode.value = task?.mode || "auto";
+  form.dependsOn.value = task?.dependsOn || "";
+  form.minBlock.value = task?.minBlock ?? "";
+  form.maxBlock.value = task?.maxBlock ?? "";
+  form.startHint.value = task?.startHint || "";
   modal.showModal();
 }
 
 function openEventModal(modal) {
+  const form = $("#eventForm");
   const start = new Date();
   start.setHours(start.getHours() + 1, 0, 0, 0);
   const end = new Date(start);
   end.setHours(end.getHours() + 1);
-  $("#eventForm").start.value = toDateInputValue(start);
-  $("#eventForm").end.value = toDateInputValue(end);
+
+  clearFormError(form);
+  form.reset();
+  form.start.value = toDateInputValue(start);
+  form.end.value = toDateInputValue(end);
   modal.showModal();
 }
 
@@ -111,4 +161,18 @@ function formData(form) {
 
 function optionalNumber(value) {
   return value === "" || value == null ? undefined : Number(value);
+}
+
+function setFormError(form, message) {
+  const error = form.querySelector("[data-form-error]");
+  error.textContent = message;
+  error.hidden = false;
+  error.scrollIntoView({ block: "nearest" });
+}
+
+function clearFormError(form) {
+  const error = form.querySelector("[data-form-error]");
+  if (!error) return;
+  error.textContent = "";
+  error.hidden = true;
 }

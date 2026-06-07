@@ -123,6 +123,7 @@ function renderTaskCard(task, state) {
     <div class="task-progress"><span style="width: ${percent}%"></span></div>
     <div class="block-meta">${done}/${task.duration} 分钟 · ${modeLabel(task.mode)}${dependency ? ` · 依赖：${escapeHtml(dependency)}` : ""}</div>
     <div class="card-actions">
+      <button class="mini-button partial" data-task-action="edit" data-task-id="${escapeHtml(task.id)}">编辑</button>
       <button class="mini-button done" data-task-action="done" data-task-id="${escapeHtml(task.id)}">标记完成</button>
       <button class="mini-button miss" data-task-action="delete" data-task-id="${escapeHtml(task.id)}">删除</button>
     </div>

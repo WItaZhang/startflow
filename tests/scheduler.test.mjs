@@ -113,3 +113,35 @@ test("scheduler reports capacity risk", () => {
   assert.equal(plan.risks.length, 1);
   assert.equal(plan.risks[0].type, "capacity");
 });
+
+test("scheduler does not create sub-minimum trailing blocks", () => {
+  const state = {
+    settings: {
+      wake: "08:00",
+      sleep: "22:00",
+      minBlock: 60,
+      maxBlock: 90,
+      dailyBuffer: 0,
+      deadlineBufferHours: 0
+    },
+    tasks: [
+      {
+        id: "task-a",
+        title: "长任务",
+        duration: 175,
+        doneMinutes: 0,
+        deadline: "2026-06-07T21:00:00.000Z",
+        mode: "auto",
+        dependsOn: "",
+        history: []
+      }
+    ],
+    events: []
+  };
+
+  const plan = buildPlan(state, { now: "2026-06-06T08:00:00.000Z", horizonDays: 3 });
+  const taskBlocks = plan.blocks.filter((block) => block.type === "task");
+  assert.equal(taskBlocks.length, 2);
+  assert.ok(taskBlocks.every((block) => block.minutes >= 60));
+  assert.equal(taskBlocks.reduce((sum, block) => sum + block.minutes, 0), 175);
+});

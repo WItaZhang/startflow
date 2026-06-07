@@ -53,11 +53,8 @@ export function formatMonth(date) {
 }
 
 export function formatTime(date) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  }).format(date);
+  const value = new Date(date);
+  return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
 }
 
 export function formatRange(start, end) {

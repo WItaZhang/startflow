@@ -30,6 +30,21 @@ export function createStore() {
         tasks: [...current.tasks, { ...task, id: createId("task"), doneMinutes: 0, missedCount: 0, history: [] }]
       }));
     },
+    updateTask(taskId, patch) {
+      update((current) => ({
+        ...current,
+        tasks: current.tasks.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                ...patch,
+                dependsOn: patch.dependsOn === taskId ? "" : patch.dependsOn,
+                doneMinutes: Math.min(task.doneMinutes || 0, Number(patch.duration ?? task.duration))
+              }
+            : task
+        )
+      }));
+    },
     addEvent(event) {
       update((current) => ({
         ...current,

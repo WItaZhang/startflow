@@ -247,10 +247,12 @@
         <div class="modal-head">
           <div>
             <p class="eyebrow">任务</p>
-            <h3>新建任务</h3>
+          <h3 id="taskModalTitle">新建任务</h3>
           </div>
-          <button class="icon-button" value="cancel" aria-label="关闭"><span class="material-symbols-outlined">close</span></button>
+          <button class="icon-button" value="cancel" type="button" data-close-modal aria-label="关闭"><span class="material-symbols-outlined">close</span></button>
         </div>
+        <div class="form-error" data-form-error hidden></div>
+        <input type="hidden" name="taskId" />
         <div class="form-grid">
           <label class="form-span">
             任务名
@@ -293,7 +295,7 @@
         </div>
         <div class="modal-actions">
           <button class="button secondary" value="cancel" type="button" data-close-modal>取消</button>
-          <button class="button primary" value="default" type="submit">保存并排程</button>
+          <button class="button primary" value="default" type="submit" id="taskSubmitLabel">保存并排程</button>
         </div>
       </form>
     </dialog>
@@ -305,8 +307,9 @@
             <p class="eyebrow">不可用时间</p>
             <h3>新建日程</h3>
           </div>
-          <button class="icon-button" value="cancel" aria-label="关闭"><span class="material-symbols-outlined">close</span></button>
+          <button class="icon-button" value="cancel" type="button" data-close-modal aria-label="关闭"><span class="material-symbols-outlined">close</span></button>
         </div>
+        <div class="form-error" data-form-error hidden></div>
         <div class="form-grid">
           <label class="form-span">
             日程名
@@ -337,9 +340,10 @@
         <div class="modal-head">
           <div>
             <p class="eyebrow">执行反馈</p>
-            <h3>做了一部分</h3>
+          <h3>做了一部分</h3>
           </div>
         </div>
+        <div class="form-error" data-form-error hidden></div>
         <label>
           实际完成了多少分钟
           <input name="minutes" type="number" min="5" step="5" value="15" />
@@ -359,7 +363,7 @@
             <p class="eyebrow">重新开始</p>
             <h3>清理所有任务和日程？</h3>
           </div>
-          <button class="icon-button" value="cancel" aria-label="关闭"><span class="material-symbols-outlined">close</span></button>
+          <button class="icon-button" value="cancel" type="button" data-close-modal aria-label="关闭"><span class="material-symbols-outlined">close</span></button>
         </div>
         <p class="confirm-copy">
           这会删除所有任务、执行记录、课程、聚餐和其他不可用时间。睡眠时间和排程偏好会保留。
