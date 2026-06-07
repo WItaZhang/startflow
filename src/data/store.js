@@ -84,6 +84,13 @@ export function createStore() {
     seed() {
       state = sampleState();
       notify();
+    },
+    clearWorkspace() {
+      update((current) => ({
+        ...current,
+        tasks: [],
+        events: []
+      }));
     }
   };
 

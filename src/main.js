@@ -55,9 +55,15 @@ $("#rescheduleButton").addEventListener("click", () => {
   showToast("已根据当前任务、睡眠和不可用时间重新规划。");
 });
 
-$("#seedButton").addEventListener("click", () => {
-  store.seed();
-  showToast("已载入一组示例任务和日程。");
+$("#openClearModal").addEventListener("click", () => {
+  $("#clearModal").showModal();
+});
+
+$("#clearForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  store.clearWorkspace();
+  $("#clearModal").close();
+  showToast("已清理所有任务和日程，可以重新开始。");
 });
 
 $("#prevMonth").addEventListener("click", () => {

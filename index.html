@@ -54,9 +54,9 @@
             <button class="active" data-view-shortcut="today">今日</button>
             <button data-view-shortcut="calendar">月视图</button>
           </div>
-          <button class="button secondary" id="seedButton">
-            <span class="material-symbols-outlined">auto_awesome</span>
-            示例数据
+          <button class="button secondary danger-action" id="openClearModal">
+            <span class="material-symbols-outlined">delete_sweep</span>
+            一键清理
           </button>
           <button class="button primary" id="openTaskModal">
             <span class="material-symbols-outlined">add</span>
@@ -348,6 +348,25 @@
         <div class="modal-actions">
           <button class="button secondary" value="cancel" type="button" data-close-modal>取消</button>
           <button class="button primary" value="default" type="submit">确认并重排</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="clearModal">
+      <form method="dialog" class="modal-card small" id="clearForm">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">重新开始</p>
+            <h3>清理所有任务和日程？</h3>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="关闭"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <p class="confirm-copy">
+          这会删除所有任务、执行记录、课程、聚餐和其他不可用时间。睡眠时间和排程偏好会保留。
+        </p>
+        <div class="modal-actions">
+          <button class="button secondary" value="cancel" type="button" data-close-modal>取消</button>
+          <button class="button primary danger-primary" value="default" type="submit">确认清理</button>
         </div>
       </form>
     </dialog>
