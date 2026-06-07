@@ -1,3 +1,4 @@
+import { formatTaskFitError, validateTaskFits } from "../domain/taskValidation.js";
 import { $, closeDialog, showToast } from "./dom.js";
 
 export function bindForms(store, getCurrentPlan) {
@@ -39,6 +40,8 @@ export function bindForms(store, getCurrentPlan) {
       maxBlock: optionalNumber(data.maxBlock),
       startHint: data.startHint.trim()
     };
+    const fit = validateTaskFits(store.getState(), data.taskId, payload);
+    if (!fit.ok) return setFormError(form, formatTaskFitError(fit.risk, fit.plan.settings));
 
     if (data.taskId) {
       store.updateTask(data.taskId, payload);

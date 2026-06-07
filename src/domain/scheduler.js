@@ -46,6 +46,7 @@ export function buildPlan(state, options = {}) {
       risks.push({
         taskId: task.id,
         type: "capacity",
+        remaining: result.remaining,
         message: `「${task.title}」还缺 ${result.remaining} 分钟，当前可用时间不足。`
       });
     } else {

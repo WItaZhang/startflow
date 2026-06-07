@@ -1,4 +1,5 @@
 import { addDays, formatDate, formatMonth, formatRange, formatTime, minutesBetween, startOfDay } from "../domain/time.js";
+import { formatTaskFitError } from "../domain/taskValidation.js";
 import { $, escapeHtml } from "./dom.js";
 
 export function renderApp({ state, plan, selectedView, calendarDate, actions }) {
@@ -303,10 +304,7 @@ function renderRiskInsight(state, plan) {
               .map((risk) => {
                 const task = tasks.get(risk.taskId);
                 const title = task?.title || "未知任务";
-                const detail =
-                  risk.type === "capacity"
-                    ? "DDL 前可用时间不足，可能需要调整截止时间、减少任务时长或释放固定安排。"
-                    : "依赖任务无法先完成，所以这个任务暂时无法可靠排入。";
+                const detail = formatTaskFitError(risk, plan.settings);
                 return `<article class="insight-row is-risk">
                   <div>
                     <strong>${escapeHtml(title)}</strong>
