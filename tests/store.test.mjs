@@ -21,6 +21,54 @@ test("local repositories keep user workspaces isolated", async () => {
   assert.equal(aliceAgain.getState().tasks.length, 0);
 });
 
+test("store serializes saves so stale snapshots cannot overwrite newer state", async () => {
+  installMemoryStorage();
+  const saves = [];
+  const gates = [];
+  const repository = {
+    loadCachedState: () => ({
+      version: 1,
+      settings: {
+        wake: "07:30",
+        sleep: "23:30",
+        minBlock: 25,
+        maxBlock: 90,
+        dailyBuffer: 30,
+        deadlineBufferHours: 2
+      },
+      tasks: [],
+      events: []
+    }),
+    async loadState() {
+      return this.loadCachedState();
+    },
+    saveState(state) {
+      const gate = createDeferred();
+      saves.push(JSON.parse(JSON.stringify(state)));
+      gates.push(gate);
+      return gate.promise;
+    }
+  };
+
+  const store = createStore(repository);
+  store.updateSettings({ wake: "08:00" });
+  await flushPromises();
+  assert.equal(saves.length, 1);
+  assert.equal(saves[0].settings.wake, "08:00");
+
+  store.updateSettings({ wake: "09:00" });
+  await flushPromises();
+  assert.equal(saves.length, 1);
+
+  gates[0].resolve();
+  await waitFor(() => saves.length === 2);
+  assert.equal(saves[1].settings.wake, "09:00");
+
+  gates[1].resolve();
+  await waitFor(() => store.getStatus().saving === false);
+  assert.equal(store.getStatus().error, "");
+});
+
 test("supabase repository saves normalized rows and deletes stale rows", async () => {
   installMemoryStorage();
   const db = createFakeSupabase();
@@ -156,6 +204,24 @@ function installMemoryStorage() {
 async function flushPromises() {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+  return { promise, resolve, reject };
+}
+
+async function waitFor(assertion, attempts = 20) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (assertion()) return;
+    await flushPromises();
+  }
+  throw new Error("Timed out waiting for condition.");
 }
 
 function createFakeSupabase(seed = {}) {

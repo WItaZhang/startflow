@@ -7,7 +7,8 @@ export function createStore(repository = createLocalRepository("guest")) {
   const listeners = new Set();
   const statusListeners = new Set();
   let status = { loading: false, saving: false, error: "" };
-  let saveVersion = 0;
+  let pendingSaveState = null;
+  let saveInFlight = false;
 
   const setStatus = (patch) => {
     status = { ...status, ...patch };
@@ -45,19 +46,31 @@ export function createStore(repository = createLocalRepository("guest")) {
   }
 
   function queueSave() {
-    const version = ++saveVersion;
-    const snapshot = getState();
+    pendingSaveState = getState();
+    if (!saveInFlight) {
+      void flushSaveQueue();
+    }
+  }
+
+  async function flushSaveQueue() {
+    saveInFlight = true;
     setStatus({ saving: true, error: "" });
-    Promise.resolve()
-      .then(() => repository.saveState?.(snapshot))
-      .then(() => {
-        if (version === saveVersion) setStatus({ saving: false });
-      })
-      .catch((error) => {
-        if (version === saveVersion) {
-          setStatus({ saving: false, error: error.message || "数据保存失败，请稍后重试。" });
-        }
-      });
+
+    while (pendingSaveState) {
+      const snapshot = pendingSaveState;
+      pendingSaveState = null;
+      try {
+        await repository.saveState?.(snapshot);
+      } catch (error) {
+        pendingSaveState = pendingSaveState || snapshot;
+        saveInFlight = false;
+        setStatus({ saving: false, error: error.message || "数据保存失败，请稍后重试。" });
+        return;
+      }
+    }
+
+    saveInFlight = false;
+    setStatus({ saving: false });
   }
 
   return {
