@@ -1,65 +1,102 @@
 # StartFlow
 
-StartFlow 是一个给“事情一多就启动困难”的人使用的任务规划原型。它不做语义拆解，只把任务总时长拆成可开始的时间块，并在排程时避开睡眠、课程、聚餐等不可用时间。
+StartFlow 是一个给“事情一多就启动困难”的人使用的任务规划产品原型。它不做语义拆分，只把任务总时长切成可开始的时间块，并在排程时避开睡眠、课程、聚餐等不可用时间。
 
-## 产品特质
+## 当前能力
 
-- 低输入负担：任务只需要名称、预计时长、DDL、完成方式和可选依赖。
-- 真实反馈：任务块提供“完成”“做了一部分”“没能做到”，后续计划会随反馈重排。
-- 时间可信：睡眠、固定日程和手动添加的不可用时间都会进入排程约束。
-- 依赖清晰：后置任务只会排在依赖任务完成之后。
-- 风险显式：容量不足或依赖无法完成时，系统会给出风险提示。
+- 登录 / 注册：支持 Supabase Auth；没有配置 Supabase 时会进入本地演示模式。
+- 用户数据隔离：每个用户有独立任务、日程、设置和执行历史。
+- 云端持久化：配置 Supabase 后，状态保存到 `public.user_states`，并由 RLS 限制为本人可读写。
+- 任务排程：支持 DDL、最短/最长单次、依赖任务、一次做完/不要一次做完。
+- 执行反馈：任务块支持“完成”“做了一部分”“没能做到”，计划会按真实反馈重排。
+- 风险提示：容量不足或依赖无法完成时，会显示明确风险。
 
-## 工程特质
+## 本地运行
 
-- 领域逻辑独立：`src/domain/scheduler.js` 不依赖 DOM，可直接测试。
-- 状态层独立：`src/data/store.js` 负责默认数据、迁移、localStorage 和状态更新。
-- UI 层独立：`src/ui/` 只负责渲染、表单和导航。
-- 可测试：`tests/scheduler.test.mjs` 覆盖避开日程、依赖顺序和容量不足。
-- 可扩展：以后接 Google Calendar、后端 API 或替换成 React/Vue 时，排程核心可以保留。
+```bash
+npm install
+npm run dev
+```
 
-## 运行
+打开 Vite 输出的本地地址，通常是：
+
+```text
+http://localhost:5173
+```
+
+运行测试：
 
 ```bash
 npm test
-python -m http.server 4173 --directory .
 ```
 
-然后打开：
+生产构建：
+
+```bash
+npm run build
+npm run preview
+```
+
+## Supabase 数据库配置
+
+1. 创建 Supabase project。
+2. 在 Supabase SQL editor 运行：
 
 ```text
-http://localhost:4173
+supabase/schema.sql
 ```
+
+3. 在 Supabase Auth 中启用 Email provider。
+4. 如果不想要求邮件确认，可以在开发阶段关闭 Confirm email；生产环境建议保留确认。
+
+数据库表：
+
+- `public.user_states`
+  - `user_id`: 当前 Supabase auth 用户 ID。
+  - `state`: StartFlow 的 settings/tasks/events/history JSON。
+  - `updated_at`: 自动更新时间。
+
+RLS 已开启，策略只允许登录用户读写自己的 `user_id`。
 
 ## Vercel 部署
 
-这个项目是纯静态前端，可以直接发布到 Vercel。
-
-推荐设置：
+Vercel 推荐设置：
 
 ```text
-Framework Preset: Other
-Build Command: 留空
-Output Directory: 留空
+Framework Preset: Vite
+Build Command: npm run build
+Output Directory: dist
 Install Command: npm install
 ```
 
-`vercel.json` 已经配置了静态资源缓存和 SPA fallback。即使之后加了前端路由，刷新页面也会回到 `index.html`。
+Environment Variables：
 
-## 结构
+```text
+VITE_SUPABASE_URL=<your Supabase project URL>
+VITE_SUPABASE_ANON_KEY=<your Supabase anon public key>
+```
+
+如果不配置这两个变量，应用会进入本地演示模式，数据只保存在浏览器 localStorage，不会上云。
+
+## 工程结构
 
 ```text
 .
 ├── index.html
 ├── styles.css
 ├── vercel.json
+├── supabase/
+│   └── schema.sql
 ├── src/
 │   ├── main.js
 │   ├── data/
 │   │   └── store.js
 │   ├── domain/
 │   │   ├── scheduler.js
+│   │   ├── taskValidation.js
 │   │   └── time.js
+│   ├── services/
+│   │   └── auth.js
 │   └── ui/
 │       ├── dom.js
 │       ├── forms.js

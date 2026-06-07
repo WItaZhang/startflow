@@ -11,6 +11,37 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <section class="auth-screen" id="authScreen">
+      <div class="auth-panel">
+        <div class="auth-copy">
+          <p class="eyebrow">StartFlow</p>
+          <h1>登录后开始管理你的真实计划</h1>
+          <p>任务、日程、设置和执行记录会按用户隔离保存。配置 Supabase 后，它会同步到云端数据库。</p>
+        </div>
+        <form class="auth-card" id="authForm">
+          <div>
+            <p class="eyebrow" id="authModeLabel">账户</p>
+            <h2>登录 / 注册</h2>
+          </div>
+          <div class="form-error" data-form-error hidden></div>
+          <label>
+            邮箱
+            <input name="email" type="email" autocomplete="email" required placeholder="you@example.com" />
+          </label>
+          <label>
+            密码
+            <input name="password" type="password" autocomplete="current-password" minlength="6" placeholder="至少 6 位" />
+          </label>
+          <div class="auth-actions">
+            <button class="button primary" type="submit">登录</button>
+            <button class="button secondary" type="button" id="signUpButton">注册</button>
+          </div>
+          <p class="auth-note" id="authModeNote"></p>
+        </form>
+      </div>
+    </section>
+
+    <div class="app-root" id="appRoot" hidden>
     <aside class="sidebar">
       <div class="brand">
         <h1>StartFlow</h1>
@@ -37,9 +68,10 @@
       <div class="profile">
         <div class="avatar">凡</div>
         <div>
-          <strong>张小凡</strong>
-          <span>轻量规划中</span>
+          <strong id="profileName">StartFlow</strong>
+          <span id="profileStatus">同步中</span>
         </div>
+        <button class="icon-button profile-logout" id="signOutButton" type="button" aria-label="退出登录"><span class="material-symbols-outlined">logout</span></button>
       </div>
     </aside>
 
@@ -413,6 +445,7 @@
       </div>
     </dialog>
 
+    </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script type="module" src="src/main.js"></script>
   </body>

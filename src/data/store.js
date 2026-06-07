@@ -2,27 +2,75 @@ import { addDays, atClock, iso, startOfDay } from "../domain/time.js";
 
 const STORAGE_KEY = "startflow-state-v1";
 
-export function createStore() {
-  let state = loadState();
+export function createStore(repository = createLocalRepository("guest")) {
+  let state = migrateState(repository.loadCachedState?.() || sampleState());
   const listeners = new Set();
+  const statusListeners = new Set();
+  let status = { loading: false, saving: false, error: "" };
+  let saveVersion = 0;
 
-  const notify = () => {
-    saveState(state);
+  const setStatus = (patch) => {
+    status = { ...status, ...patch };
+    statusListeners.forEach((listener) => listener(getStatus()));
+  };
+
+  const notify = (options = {}) => {
     listeners.forEach((listener) => listener(getState()));
+    if (!options.skipSave) {
+      queueSave();
+    }
   };
 
   const getState = () => structuredCloneCompat(state);
+  const getStatus = () => ({ ...status });
 
   const update = (updater) => {
     state = migrateState(updater(getState()));
     notify();
   };
 
+  async function hydrate() {
+    setStatus({ loading: true, error: "" });
+    try {
+      const remoteState = await repository.loadState?.();
+      if (remoteState) {
+        state = migrateState(remoteState);
+      }
+      notify({ skipSave: true });
+      setStatus({ loading: false });
+    } catch (error) {
+      setStatus({ loading: false, error: error.message || "数据加载失败，正在使用本地缓存。" });
+      notify({ skipSave: true });
+    }
+  }
+
+  function queueSave() {
+    const version = ++saveVersion;
+    const snapshot = getState();
+    setStatus({ saving: true, error: "" });
+    Promise.resolve()
+      .then(() => repository.saveState?.(snapshot))
+      .then(() => {
+        if (version === saveVersion) setStatus({ saving: false });
+      })
+      .catch((error) => {
+        if (version === saveVersion) {
+          setStatus({ saving: false, error: error.message || "数据保存失败，请稍后重试。" });
+        }
+      });
+  }
+
   return {
     getState,
+    getStatus,
+    hydrate,
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    subscribeStatus(listener) {
+      statusListeners.add(listener);
+      return () => statusListeners.delete(listener);
     },
     addTask(task) {
       update((current) => ({
@@ -93,7 +141,9 @@ export function createStore() {
     deleteTask(taskId) {
       update((current) => ({
         ...current,
-        tasks: current.tasks.filter((task) => task.id !== taskId).map((task) => (task.dependsOn === taskId ? { ...task, dependsOn: "" } : task))
+        tasks: current.tasks
+          .filter((task) => task.id !== taskId)
+          .map((task) => (task.dependsOn === taskId ? { ...task, dependsOn: "" } : task))
       }));
     },
     deleteEvent(eventId) {
@@ -131,17 +181,57 @@ export function createStore() {
   }
 }
 
-export function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? migrateState(JSON.parse(raw)) : sampleState();
-  } catch {
-    return sampleState();
-  }
+export function createLocalRepository(userId = "guest") {
+  const scopedKey = `${STORAGE_KEY}:${userId}`;
+
+  return {
+    loadCachedState() {
+      return readStoredState(scopedKey) || readStoredState(STORAGE_KEY);
+    },
+    async loadState() {
+      return this.loadCachedState();
+    },
+    async saveState(state) {
+      localStorage.setItem(scopedKey, JSON.stringify(migrateState(state)));
+    }
+  };
 }
 
-export function saveState(state) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(migrateState(state)));
+export function createSupabaseRepository(client, userId) {
+  const cache = createLocalRepository(userId);
+
+  return {
+    loadCachedState() {
+      return cache.loadCachedState();
+    },
+    async loadState() {
+      const { data, error } = await client
+        .from("user_states")
+        .select("state")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data?.state) {
+        await cache.saveState(data.state);
+        return data.state;
+      }
+
+      const initial = cache.loadCachedState() || sampleState();
+      await this.saveState(initial);
+      return initial;
+    },
+    async saveState(state) {
+      const nextState = migrateState(state);
+      await cache.saveState(nextState);
+      const { error } = await client.from("user_states").upsert({
+        user_id: userId,
+        state: nextState,
+        updated_at: new Date().toISOString()
+      });
+      if (error) throw error;
+    }
+  };
 }
 
 export function migrateState(state) {
@@ -160,7 +250,7 @@ export function migrateState(state) {
   };
 }
 
-function sampleState() {
+export function sampleState() {
   const today = startOfDay(new Date());
   const taskA = createId("task");
   const taskB = createId("task");
@@ -237,6 +327,15 @@ function sampleState() {
       }
     ]
   });
+}
+
+function readStoredState(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? migrateState(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
 }
 
 function historyItem(label, minutes) {
